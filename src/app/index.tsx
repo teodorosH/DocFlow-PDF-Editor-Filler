@@ -19,19 +19,25 @@ import {
   View,
 } from 'react-native';
 
-type ToolType = 'text' | 'highlight' | 'redact';
-type PlanType = 'free' | 'pro' | 'premium';
+type ToolType = 'text' | 'highlight' | 'redact' | 'signature';
+type PlanType = 'free' | 'micro_pass' | 'premium';
+type Language = 'he' | 'en' | 'ar' | 'am';
 
 interface User {
   id: number;
   email: string;
+  fullName?: string;
+  full_name?: string;
   plan: PlanType;
+  editsCount: number;
+  passCredits: number;
 }
 
 interface EditorElement {
   id: string;
   type: ToolType;
   text?: string;
+  imageUri?: string;
   x: number;
   y: number;
   width: number;
@@ -47,10 +53,162 @@ interface PdfDimensions {
 }
 
 const CONTAINER_WIDTH = 600;
-const AD_DURATION = 20;
-const API_URL = 'http://localhost:5000/api'; // כתובת השרת המקומי
+const API_URL = 'http://localhost:5000/api';
+
+const I18N = {
+  he: {
+    heroTitle: 'עריכה, מילוי וחתימה על PDF 📄✍️',
+    heroSubtitle: 'הפתרון המהיר והפשוט ביותר למסמכי ה-PDF שלך, בכל שפה ומכל מקלדת!',
+    uploadPdf: '📂 העלה קובץ PDF להתחלה',
+    changePdf: '🔄 החלף קובץ PDF',
+    textTool: '✍️ טקסט',
+    textToolDesc: 'מלא טפסים, שדות וטקסט חופשי',
+    highlightTool: '🖍️ מרקור',
+    highlightToolDesc: 'הברק קטעים חשובים במסמך',
+    redactTool: '⬛ צנזור',
+    redactToolDesc: 'הסתר מידע רגיש וחסוי בבטחה',
+    signatureTool: '🖋️ חתימה',
+    signatureToolDesc: 'חתימה בנגיעה או בעכבר',
+    preview: '👁️ תצוגה מקדימה',
+    download: '💾 הורד PDF סופי',
+    loginRegister: '🔑 התחבר / הרשם',
+    logout: 'יציאה',
+    prevPage: '◀ עמוד קודם',
+    nextPage: 'עמוד הבא ▶',
+    pageOf: 'עמוד {current} מתוך {total}',
+    guestPageLimit: '(אורח: עמוד 1 בלבד)',
+    signModalTitle: '🖋️ צייר את חתימתך למטה:',
+    clear: 'ניקוי',
+    confirmSignature: '✅ אישור חתימה',
+    close: 'סגור',
+    selectPlanTitle: 'בחר את המסלול המתאים לך:',
+    basicPlan: 'Basic 🆓',
+    basicPlanDesc: '3 עריכות/חודש',
+    passPlan: 'Pass 🎟️',
+    passPlanDesc: '10 עריכות ושמירות',
+    premiumPlan: 'Premium 👑',
+    premiumPlanDesc: 'ללא הגבלה כלל',
+    guestNotice: 'עורכים בשפה שלך בכל מקלדת (עברית, ערבית, אמהרית, סינית וכו\')',
+  },
+  en: {
+    heroTitle: 'PDF Edit, Fill & Sign 📄✍️',
+    heroSubtitle: 'The fastest and easiest solution for your PDF documents in any language!',
+    uploadPdf: '📂 Upload PDF Document',
+    changePdf: '🔄 Change PDF File',
+    textTool: '✍️ Text',
+    textToolDesc: 'Fill forms, fields, and custom text',
+    highlightTool: '🖍️ Highlight',
+    highlightToolDesc: 'Highlight important document parts',
+    redactTool: '⬛ Redact',
+    redactToolDesc: 'Hide sensitive and confidential text',
+    signatureTool: '🖋️ Signature',
+    signatureToolDesc: 'Sign with touch or mouse',
+    preview: '👁️ Preview',
+    download: '💾 Download PDF',
+    loginRegister: '🔑 Login / Register',
+    logout: 'Logout',
+    prevPage: '◀ Previous',
+    nextPage: 'Next ▶',
+    pageOf: 'Page {current} of {total}',
+    guestPageLimit: '(Guest: Page 1 only)',
+    signModalTitle: '🖋️ Draw your signature below:',
+    clear: 'Clear',
+    confirmSignature: '✅ Apply Signature',
+    close: 'Close',
+    selectPlanTitle: 'Choose your plan:',
+    basicPlan: 'Basic 🆓',
+    basicPlanDesc: '3 edits/month',
+    passPlan: 'Pass 🎟️',
+    passPlanDesc: '10 edits & saves',
+    premiumPlan: 'Premium 👑',
+    premiumPlanDesc: 'Unlimited access',
+    guestNotice: 'Supports all keyboards and languages natively (Hebrew, Arabic, Amharic, Chinese, etc.)',
+  },
+  ar: {
+    heroTitle: 'تعديل وتعبئة وتوقيع PDF 📄✍️',
+    heroSubtitle: 'الحل الأسرع والأسهل لمستندات PDF الخاصة بك بأي لغة!',
+    uploadPdf: '📂 تحميل ملف PDF',
+    changePdf: '🔄 تغيير الملف',
+    textTool: '✍️ نص',
+    textToolDesc: 'تعبئة النماذج والتحرير الحر',
+    highlightTool: '🖍️ تظليل',
+    highlightToolDesc: 'تمييز النصوص الهامة في المستند',
+    redactTool: '⬛ إخفاء',
+    redactToolDesc: 'إخفاء المعلومات الحساسة',
+    signatureTool: '🖋️ توقيع',
+    signatureToolDesc: 'التوقيع باللمس أو الماوس',
+    preview: '👁️ معاينة',
+    download: '💾 تحميل PDF',
+    loginRegister: '🔑 تسجيل الدخول',
+    logout: 'خروج',
+    prevPage: '◀ السابق',
+    nextPage: 'التالي ▶',
+    pageOf: 'صفحة {current} من {total}',
+    guestPageLimit: '(زائر: الصفحة 1 فقط)',
+    signModalTitle: '🖋️ ارسم توقيعك أدناه:',
+    clear: 'مسح',
+    confirmSignature: '✅ تأكيد التوقيع',
+    close: 'إغلاق',
+    selectPlanTitle: 'اختر الخطة المناسبة لك:',
+    basicPlan: 'مجاني 🆓',
+    basicPlanDesc: '3 تعديلات/شهر',
+    passPlan: 'تذكرة 🎟️',
+    passPlanDesc: '10 تعديلات وحفظ',
+    premiumPlan: 'ممتاز 👑',
+    premiumPlanDesc: 'بلا حدود',
+    guestNotice: 'يدعم جميع اللغات ولوحات المفاتيح تلقائياً',
+  },
+  am: {
+    heroTitle: 'ፒዲኤፍ ማስተካከል፣ መሙላት እና መፈረም 📄✍️',
+    heroSubtitle: 'ለእርስዎ ፒዲኤፍ ሰነዶች ፈጣን እና ቀላሉ መፍትሄ!',
+    uploadPdf: '📂 ፒዲኤፍ ፋይል ጫን',
+    changePdf: '🔄 ፋይል ቀይር',
+    textTool: '✍️ ጽሑፍ',
+    textToolDesc: 'ቅጾችን እና ነፃ ጽሑፎችን ይሙሉ',
+    highlightTool: '🖍️ አጉላ',
+    highlightToolDesc: 'አስፈላጊ ሰነዶችን ያደምቁ',
+    redactTool: '⬛ ሰርዝ',
+    redactToolDesc: 'ሚስጥራዊ መረጃዎችን ደብቅ',
+    signatureTool: '🖋️ ፊርማ',
+    signatureToolDesc: 'በንክኪ ወይም በሲያን ይፈርሙ',
+    preview: '👁️ ቅድመ እይታ',
+    download: '💾 ፒዲኤፍ አውርድ',
+    loginRegister: '🔑 ግባ / ተመዝገብ',
+    logout: 'ውጣ',
+    prevPage: '◀ የቀደመው ገጽ',
+    nextPage: 'ቀጣይ ገጽ ▶',
+    pageOf: 'ገጽ {current} ከ {total}',
+    guestPageLimit: '(እንግዳ: ገጽ 1 ብቻ)',
+    signModalTitle: '🖋️ ፊርማዎን ከታች ይሳሉ:',
+    clear: 'አጽዳ',
+    confirmSignature: '✅ ፊርማ አረጋግጥ',
+    close: 'ዝጋ',
+    selectPlanTitle: 'እባክዎን ዕቅድዎን ይምረጡ:',
+    basicPlan: 'ነፃ 🆓',
+    basicPlanDesc: '3 ማስተካከያ/ወር',
+    passPlan: 'ቲኬት 🎟️',
+    passPlanDesc: '10 ማስተካከያ እና ማስቀመጥ',
+    premiumPlan: 'ፕሪሚየም 👑',
+    premiumPlanDesc: 'ያልተገደበ',
+    guestNotice: 'በማንኛውም ቋንቋ እና የቁልፍ ሰሌዳ ይሰራሉ',
+  },
+};
+
+function DocFlowLogo() {
+  return (
+    <View style={styles.logoContainer}>
+      <View style={styles.logoBadgeIcon}>
+        <Text style={styles.logoBadgeText}>PDF</Text>
+      </View>
+      <Text style={styles.logoText}>Doc<Text style={styles.logoHighlight}>Flow</Text></Text>
+    </View>
+  );
+}
 
 export default function PdfEditorScreen() {
+  const [lang, setLang] = useState<Language>('he');
+  const t = I18N[lang];
+
   const [pdfUri, setPdfUri] = useState<string | null>(null);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [pdfDimensions, setPdfDimensions] = useState<PdfDimensions | null>(null);
@@ -64,20 +222,29 @@ export default function PdfEditorScreen() {
   const [currentText, setCurrentText] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 👤 State משתמש ואותנטיקציה
+  const [showSignatureModal, setShowSignatureModal] = useState(false);
+  const [signatureClickPos, setSignatureClickPos] = useState<{ x: number; y: number } | null>(null);
+  const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const isDrawingSignature = useRef(false);
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authStep, setAuthStep] = useState<1 | 2>(1);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authFullName, setAuthFullName] = useState('');
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('free');
 
-  // 📺 State פרסומת
-  const [showAdModal, setShowAdModal] = useState(false);
-  const [adTimer, setAdTimer] = useState(AD_DURATION);
-  const [isAdFinished, setIsAdFinished] = useState(false);
+  const [userAlreadyExistsError, setUserAlreadyExistsError] = useState(false);
 
-  // 👁️ State תצוגה מקדימה
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [adTitle, setAdTitle] = useState('📢 פרסומת חסות');
+  const [adMessage, setAdMessage] = useState('');
+  const [adTimer, setAdTimer] = useState(10);
+  const [isAdFinished, setIsAdFinished] = useState(false);
+  const [pendingAction, setPendingAction] = useState<'upload' | 'preview' | 'download' | null>(null);
+
   const [showPreviewModal, setShowPreviewModal] = useState(false);
   const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
 
@@ -108,42 +275,140 @@ export default function PdfEditorScreen() {
     }
   }, [pdfBytes, pdfDimensions, currentPageIndex]);
 
-  // 🔐 פונקציית התחברות / הרשמה
-  const handleAuthSubmit = async () => {
-    if (!authEmail || !authPassword) {
-      Alert.alert('שגיאה', 'נא למלא מייל וסיסמה');
-      return;
-    }
+  const initSignatureCanvas = (canvas: HTMLCanvasElement | null) => {
+    if (!canvas) return;
+    signatureCanvasRef.current = canvas;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
 
-    setLoading(true);
-    try {
-      const endpoint = authMode === 'register' ? '/auth/register' : '/auth/login';
-      const res = await fetch(`${API_URL}${endpoint}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: authEmail,
-          password: authPassword,
-          plan: selectedPlan,
-        }),
-      });
+    ctx.strokeStyle = '#0052D4';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'שגיאה באותנטיקציה');
+    const getPos = (e: any) => {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top,
+      };
+    };
 
-      setCurrentUser(data.user);
-      setShowAuthModal(false);
-      setAuthEmail('');
-      setAuthPassword('');
-      Alert.alert('ברוך הבא!', `מחובר כאל: ${data.user.email} (מסלול: ${data.user.plan.toUpperCase()})`);
-    } catch (err: any) {
-      Alert.alert('שגיאה', err.message);
-    } finally {
-      setLoading(false);
+    const startDrawing = (e: any) => {
+      isDrawingSignature.current = true;
+      const pos = getPos(e);
+      ctx.beginPath();
+      ctx.moveTo(pos.x, pos.y);
+    };
+
+    const draw = (e: any) => {
+      if (!isDrawingSignature.current) return;
+      const pos = getPos(e);
+      ctx.lineTo(pos.x, pos.y);
+      ctx.stroke();
+    };
+
+    const stopDrawing = () => {
+      isDrawingSignature.current = false;
+    };
+
+    canvas.onmousedown = startDrawing;
+    canvas.onmousemove = draw;
+    canvas.onmouseup = stopDrawing;
+
+    canvas.ontouchstart = startDrawing;
+    canvas.ontouchmove = draw;
+    canvas.ontouchend = stopDrawing;
+  };
+
+  const clearSignatureCanvas = () => {
+    if (signatureCanvasRef.current) {
+      const ctx = signatureCanvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.clearRect(0, 0, signatureCanvasRef.current.width, signatureCanvasRef.current.height);
+      }
     }
   };
 
+  const saveSignatureAndPlace = () => {
+    if (!signatureCanvasRef.current || !signatureClickPos) return;
+    const dataUrl = signatureCanvasRef.current.toDataURL('image/png');
+
+    const newElement: EditorElement = {
+      id: Date.now().toString(),
+      type: 'signature',
+      imageUri: dataUrl,
+      x: Math.max(0, signatureClickPos.x - 60),
+      y: Math.max(0, signatureClickPos.y - 30),
+      width: 120,
+      height: 60,
+      fontSize: 15,
+      pageIndex: currentPageIndex,
+    };
+
+    setElements((prev) => [...prev, newElement]);
+    setSelectedElementId(newElement.id);
+    setShowSignatureModal(false);
+    setSignatureClickPos(null);
+  };
+
+  const handlePageChange = (newIndex: number) => {
+    if (!currentUser && newIndex > 0) {
+      if (Platform.OS === 'web') {
+        alert('משתמשים אורחים יכולים לערוך את עמוד 1 בלבד. הרשם בחינם כדי לערוך את כל עמודי הקובץ!');
+        setShowAuthModal(true);
+      } else {
+        Alert.alert(
+          'מגבלת אורח 🔒',
+          'משתמשים אורחים יכולים לערוך את עמוד 1 בלבד. הרשם בחינם בשניות כדי לערוך את כל עמודי הקובץ!',
+          [
+            { text: 'סגור', style: 'cancel' },
+            { text: 'הרשם בחינם 🔑', onPress: () => setShowAuthModal(true) },
+          ]
+        );
+      }
+      return;
+    }
+    setCurrentPageIndex(newIndex);
+  };
+
+  const triggerAd = (seconds: number, title: string, message: string, action: 'upload' | 'preview' | 'download') => {
+    setAdTitle(title);
+    setAdMessage(message);
+    setAdTimer(seconds);
+    setIsAdFinished(false);
+    setPendingAction(action);
+    setShowAdModal(true);
+  };
+
+  const handleAdFinishedAction = () => {
+    setShowAdModal(false);
+    if (pendingAction === 'upload') {
+      processDocumentUpload();
+    } else if (pendingAction === 'preview') {
+      executePreviewProcess();
+    } else if (pendingAction === 'download') {
+      executeFinalDownload();
+    }
+    setPendingAction(null);
+  };
+
   const pickDocument = async () => {
+    if (!currentUser) {
+      triggerAd(
+        5,
+        '⏳ טוען קובץ PDF...',
+        'אורח? הרשם בחינם כדי לבטל את זמן ההמתנה בהעלאת קבצים!',
+        'upload'
+      );
+    } else {
+      processDocumentUpload();
+    }
+  };
+
+  const processDocumentUpload = async () => {
     try {
       setLoading(true);
       const result = await DocumentPicker.getDocumentAsync({
@@ -189,8 +454,219 @@ export default function PdfEditorScreen() {
         aspectRatio: width / height,
       });
     } catch (err: any) {
-      console.error('Error picking document:', err);
       Alert.alert('שגיאה', err?.message || 'אירעה שגיאה בטעינת הקובץ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePreviewPdf = () => {
+    if (!pdfBytes) return;
+
+    if (!currentUser) {
+      triggerAd(
+        10,
+        '👁️ מכין תצוגה מקדימה...',
+        'אורחים צופים בפרסומת קצרה. הרשמה בחינם תפתח תצוגה מקדימה מיידית!',
+        'preview'
+      );
+    } else {
+      executePreviewProcess();
+    }
+  };
+
+  const executePreviewProcess = async () => {
+    setLoading(true);
+    try {
+      const watermarkedPdfBytes = await buildModifiedPdfBytes(true);
+      if (!watermarkedPdfBytes) return;
+
+      const imageUri = await renderPdfPageToImageBase64(watermarkedPdfBytes, currentPageIndex + 1);
+      setPreviewImageUri(imageUri);
+      setShowPreviewModal(true);
+    } catch (error: any) {
+      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה ביצירת תצוגה מקדימה');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const triggerDownloadProcess = async () => {
+    if (!pdfBytes) return;
+
+    if (currentUser) {
+      try {
+        const res = await fetch(`${API_URL}/user/use-edit-credit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: currentUser.id }),
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          if (Platform.OS === 'web') {
+            alert(data.error || 'הגעת למכסת העריכות שלך.');
+            setShowAuthModal(true);
+          } else {
+            Alert.alert(
+              'המכסה הסתיימה ⚠️',
+              data.error || 'הגעת למכסת העריכות שלך.',
+              [
+                { text: 'סגור' },
+                { text: 'רכוש חבילת 10 עריכות ב-₪9.90 🎟️', onPress: () => setShowAuthModal(true) },
+              ]
+            );
+          }
+          return;
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    }
+
+    if (currentUser?.plan === 'premium') {
+      executeFinalDownload();
+    } else {
+      triggerAd(
+        currentUser ? 8 : 20,
+        '💾 מכין קובץ להורדה...',
+        currentUser
+          ? 'משתמש חינם? צפה בפרסומת קצרה להורדה.'
+          : 'אורח יקר, צפה בפרסומת לפתיחת ההורדה. הרשמה חינמית תוריד את זמן ההמתנה!',
+        'download'
+      );
+    }
+  };
+
+  const executeFinalDownload = async () => {
+    setLoading(true);
+    try {
+      const pdfResultBytes = await buildModifiedPdfBytes(false);
+      if (!pdfResultBytes) return;
+
+      if (Platform.OS === 'web') {
+        const blob = new Blob([pdfResultBytes], { type: 'application/pdf' });
+        const blobUrl = URL.createObjectURL(blob);
+
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `DocFlow_${Date.now()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      } else {
+        const base64Save = _uint8ArrayToBase64(pdfResultBytes);
+        const filePath = `${FileSystem.documentDirectory}DocFlow_${Date.now()}.pdf`;
+        await FileSystem.writeAsStringAsync(filePath, base64Save, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await Sharing.shareAsync(filePath);
+      }
+
+      if (Platform.OS === 'web') {
+        alert('הקובץ הורד בהצלחה! 🎉');
+      } else {
+        Alert.alert('הצלחה!', 'הקובץ הורד בהצלחה.');
+      }
+    } catch (error: any) {
+      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה בהורדת הקובץ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAuthStep1 = async () => {
+    setUserAlreadyExistsError(false);
+
+    if (!authEmail || !authPassword) {
+      if (Platform.OS === 'web') alert('נא למלא מייל וסיסמה');
+      else Alert.alert('שגיאה', 'נא למלא מייל וסיסמה');
+      return;
+    }
+
+    if (authMode === 'register') {
+      const defaultName = authEmail.split('@')[0];
+      setAuthFullName(defaultName);
+      setAuthStep(2);
+    } else {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: authEmail, password: authPassword }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'שגיאה בהתחברות');
+
+        const displayName = data.user.fullName || data.user.full_name || data.user.email;
+        setCurrentUser(data.user);
+        setShowAuthModal(false);
+
+        if (Platform.OS === 'web') {
+          alert(`שלום ${displayName} 👋, ברוך הבא!`);
+        } else {
+          Alert.alert('ברוך הבא! 👋', `שלום ${displayName}`);
+        }
+      } catch (err: any) {
+        if (Platform.OS === 'web') alert(err.message || 'שגיאה בהתחברות');
+        else Alert.alert('שגיאה בהתחברות', err.message);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleFinalRegister = async () => {
+    setUserAlreadyExistsError(false);
+    setLoading(true);
+
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: authEmail,
+          password: authPassword,
+          fullName: authFullName,
+          plan: selectedPlan,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (data.userExists || (data.error && data.error.includes('קיים'))) {
+          setUserAlreadyExistsError(true);
+          return;
+        }
+
+        if (Platform.OS === 'web') {
+          alert(data.error || 'שגיאה בהרשמה');
+        } else {
+          Alert.alert('שגיאה', data.error || 'שגיאה בהרשמה');
+        }
+        return;
+      }
+
+      const displayName = data.user.fullName || data.user.full_name || authFullName || data.user.email;
+      setCurrentUser(data.user);
+      setShowAuthModal(false);
+      setAuthStep(1);
+
+      if (Platform.OS === 'web') {
+        alert(`ברוך הבא ${displayName}! 🎉 ההרשמה הושלמה.`);
+      } else {
+        Alert.alert('ההרשמה הושלמה! 🎉', `ברוך הבא ${displayName}!`);
+      }
+    } catch (err: any) {
+      console.error('Register fetch error:', err);
+      if (Platform.OS === 'web') {
+        alert(err.message || 'שגיאה בהתחברות לשרת');
+      } else {
+        Alert.alert('שגיאה', err.message || 'שגיאה בהתחברות לשרת');
+      }
     } finally {
       setLoading(false);
     }
@@ -218,6 +694,9 @@ export default function PdfEditorScreen() {
 
     if (activeTool === 'text') {
       setActiveInput({ x: clickX, y: clickY });
+    } else if (activeTool === 'signature') {
+      setSignatureClickPos({ x: clickX, y: clickY });
+      setShowSignatureModal(true);
     } else {
       const newElement: EditorElement = {
         id: Date.now().toString(),
@@ -276,10 +755,7 @@ export default function PdfEditorScreen() {
       const targetPage = pages[el.pageIndex] || pages[0];
 
       if (el.type === 'text' && el.text) {
-        const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(
-          el.text,
-          el.fontSize
-        );
+        const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
         if (!base64Png) continue;
 
         const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
@@ -296,6 +772,22 @@ export default function PdfEditorScreen() {
           y: finalPdfY,
           width: finalImgWidth,
           height: finalImgHeight,
+        });
+      } else if (el.type === 'signature' && el.imageUri) {
+        const imageBytes = _base64ToArrayBuffer(el.imageUri.replace(/^data:image\/png;base64,/, ''));
+        const pngImage = await pdfDoc.embedPng(imageBytes);
+
+        const finalWidth = el.width * scaleX;
+        const finalHeight = el.height * scaleY;
+
+        const finalPdfX = el.x * scaleX;
+        const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
+
+        targetPage.drawImage(pngImage, {
+          x: Math.max(0, finalPdfX),
+          y: finalPdfY,
+          width: finalWidth,
+          height: finalHeight,
         });
       } else if (el.type === 'highlight' || el.type === 'redact') {
         const { base64Png } = await renderShapeToCanvas(el.type, el.width, el.height);
@@ -319,8 +811,7 @@ export default function PdfEditorScreen() {
       }
     }
 
-    // 🔒 מנויי Pro ו-Premium מקבלים תצוגה מקדימה נקייה ללא סימון מים!
-    const isPaidUser = currentUser && (currentUser.plan === 'pro' || currentUser.plan === 'premium');
+    const isPaidUser = currentUser && (currentUser.plan === 'micro_pass' || currentUser.plan === 'premium');
     if (isPreviewMode && !isPaidUser) {
       const { base64Png: watermarkPng, width: wW, height: wH } = await renderBrandedWatermarkCanvas();
       if (watermarkPng) {
@@ -342,127 +833,152 @@ export default function PdfEditorScreen() {
     return await pdfDoc.save();
   };
 
-  const handlePreviewPdf = async () => {
-    if (!pdfBytes) return;
-    setLoading(true);
+  const renderPaginationBar = () => {
+    if (numPages <= 1) return null;
 
-    try {
-      const watermarkedPdfBytes = await buildModifiedPdfBytes(true);
-      if (!watermarkedPdfBytes) return;
+    return (
+      <View style={styles.paginationRow}>
+        <TouchableOpacity
+          style={[styles.pageBtn, currentPageIndex === 0 && styles.disabledBtn]}
+          disabled={currentPageIndex === 0}
+          onPress={() => handlePageChange(Math.max(0, currentPageIndex - 1))}
+        >
+          <Text style={styles.pageBtnText}>{t.prevPage}</Text>
+        </TouchableOpacity>
 
-      const imageUri = await renderPdfPageToImageBase64(watermarkedPdfBytes, currentPageIndex + 1);
-      setPreviewImageUri(imageUri);
-      setShowPreviewModal(true);
-    } catch (error: any) {
-      console.error('Error previewing PDF:', error);
-      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה ביצירת תצוגה מקדימה');
-    } finally {
-      setLoading(false);
-    }
-  };
+        <View style={styles.pageBadgeTextContainer}>
+          <Text style={styles.pageIndicatorText}>
+            {t.pageOf.replace('{current}', (currentPageIndex + 1).toString()).replace('{total}', numPages.toString())}
+            {!currentUser ? ` ${t.guestPageLimit}` : ''}
+          </Text>
+        </View>
 
-  // 🚀 טריגר ההורדה: מנויים בתשלום מורידים מיד, מנוי חינם רואה פרסומת!
-  const triggerDownloadProcess = () => {
-    if (!pdfBytes) return;
-
-    const isPaidUser = currentUser && (currentUser.plan === 'pro' || currentUser.plan === 'premium');
-    if (isPaidUser) {
-      executeFinalDownload(); // הורדה ישירה ללא פרסומת!
-    } else {
-      setAdTimer(AD_DURATION);
-      setIsAdFinished(false);
-      setShowAdModal(true);
-    }
-  };
-
-  const executeFinalDownload = async () => {
-    setShowAdModal(false);
-    setLoading(true);
-
-    try {
-      const pdfResultBytes = await buildModifiedPdfBytes(false);
-      if (!pdfResultBytes) return;
-
-      if (Platform.OS === 'web') {
-        const blob = new Blob([pdfResultBytes], { type: 'application/pdf' });
-        const blobUrl = URL.createObjectURL(blob);
-
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = `DocFlow_${Date.now()}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-      } else {
-        const base64Save = _uint8ArrayToBase64(pdfResultBytes);
-        const filePath = `${FileSystem.documentDirectory}DocFlow_${Date.now()}.pdf`;
-        await FileSystem.writeAsStringAsync(filePath, base64Save, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await Sharing.shareAsync(filePath);
-      }
-
-      Alert.alert('הצלחה!', 'הקובץ הורד בהצלחה.');
-    } catch (error: any) {
-      console.error('Error downloading PDF:', error);
-      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה בהורדת הקובץ');
-    } finally {
-      setLoading(false);
-    }
+        <TouchableOpacity
+          style={[styles.pageBtn, (currentPageIndex === numPages - 1 || !currentUser) && styles.disabledBtn]}
+          onPress={() => handlePageChange(Math.min(numPages - 1, currentPageIndex + 1))}
+        >
+          <Text style={styles.pageBtnText}>{t.nextPage}</Text>
+        </TouchableOpacity>
+      </View>
+    );
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* 👤 סרגל עליון עם פרטי משתמש וכפתור התחברות */}
+      {/* 🌟 Header משודרג ונגיש */}
       <View style={styles.headerBar}>
-        <Text style={styles.title}>DocFlow 📄✍️</Text>
-        
+        <DocFlowLogo />
+
+        <View style={styles.langBar}>
+          <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עב</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>EN</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>عرب</Text></TouchableOpacity>
+          <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማ</Text></TouchableOpacity>
+        </View>
+
         {currentUser ? (
           <View style={styles.userInfoBadge}>
-            <Text style={styles.userEmailText}>{currentUser.email}</Text>
+            <Text style={styles.userEmailText}>
+              👤 {currentUser.fullName || currentUser.full_name || currentUser.email}
+            </Text>
             <Text style={[styles.userPlanBadge, currentUser.plan !== 'free' && styles.paidPlanBadge]}>
               {currentUser.plan.toUpperCase()}
             </Text>
             <TouchableOpacity onPress={() => setCurrentUser(null)}>
-              <Text style={styles.logoutText}>יציאה</Text>
+              <Text style={styles.logoutText}>{t.logout}</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity style={styles.authBtn} onPress={() => setShowAuthModal(true)}>
-            <Text style={styles.authBtnText}>🔑 התחבר / הרשם</Text>
+          <TouchableOpacity
+            style={styles.authBtn}
+            onPress={() => {
+              setAuthStep(1);
+              setUserAlreadyExistsError(false);
+              setShowAuthModal(true);
+            }}
+          >
+            <Text style={styles.authBtnText}>{t.loginRegister}</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={pickDocument} disabled={loading}>
-        <Text style={styles.buttonText}>{pdfUri ? 'החלף קובץ PDF' : 'העלה קובץ PDF'}</Text>
-      </TouchableOpacity>
+      {/* 📢 באנר עליון למבקרים */}
+      {!currentUser && (
+        <View style={styles.topAdBannerSlot}>
+          <Text style={styles.adSlotLabel}>Sponsored</Text>
+          <Text style={styles.topAdBannerText}>⚡ {t.guestNotice}</Text>
+        </View>
+      )}
 
-      {pdfUri && (
+      {/* 🏠 Hero Section */}
+      {!pdfUri ? (
+        <View style={styles.heroLandingCard}>
+          <Text style={styles.heroTitle}>{t.heroTitle}</Text>
+          <Text style={styles.heroSubtitle}>{t.heroSubtitle}</Text>
+
+          <TouchableOpacity style={styles.heroUploadBtn} onPress={pickDocument} disabled={loading}>
+            <Text style={styles.heroUploadBtnText}>{t.uploadPdf}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.featureGrid}>
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>✍️</Text>
+              <Text style={styles.featureTitle}>{t.textTool}</Text>
+              <Text style={styles.featureDesc}>{t.textToolDesc}</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>🖋️</Text>
+              <Text style={styles.featureTitle}>{t.signatureTool}</Text>
+              <Text style={styles.featureDesc}>{t.signatureToolDesc}</Text>
+            </View>
+
+            <View style={styles.featureItem}>
+              <Text style={styles.featureIcon}>⬛</Text>
+              <Text style={styles.featureTitle}>{t.redactTool}</Text>
+              <Text style={styles.featureDesc}>{t.redactToolDesc}</Text>
+            </View>
+          </View>
+        </View>
+      ) : (
+        /* 📝 אזור העריכה */
         <View style={styles.editorArea}>
+          <TouchableOpacity style={styles.changeFileBtn} onPress={pickDocument} disabled={loading}>
+            <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
+          </TouchableOpacity>
+
+          {/* סרגל כלים בולט */}
           <View style={styles.toolbarRow}>
             <TouchableOpacity
               style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
               onPress={() => setActiveTool('text')}
             >
-              <Text style={styles.toolBtnText}>✍️ הוספת טקסט</Text>
+              <Text style={[styles.toolBtnText, activeTool === 'text' && styles.activeToolBtnText]}>{t.textTool}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.toolBtn, activeTool === 'signature' && styles.activeToolBtn]}
+              onPress={() => setActiveTool('signature')}
+            >
+              <Text style={[styles.toolBtnText, activeTool === 'signature' && styles.activeToolBtnText]}>{t.signatureTool}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.toolBtn, activeTool === 'highlight' && styles.activeToolBtn]}
               onPress={() => setActiveTool('highlight')}
             >
-              <Text style={styles.toolBtnText}>🖍️ מרקור</Text>
+              <Text style={[styles.toolBtnText, activeTool === 'highlight' && styles.activeToolBtnText]}>{t.highlightTool}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.toolBtn, activeTool === 'redact' && styles.activeToolBtn]}
               onPress={() => setActiveTool('redact')}
             >
-              <Text style={styles.toolBtnText}>⬛ צנזור (השחרה)</Text>
+              <Text style={[styles.toolBtnText, activeTool === 'redact' && styles.activeToolBtnText]}>{t.redactTool}</Text>
             </TouchableOpacity>
           </View>
+
+          {renderPaginationBar()}
 
           <View style={[styles.pdfViewerContainer, { width: CONTAINER_WIDTH, height: containerHeight }]}>
             {Platform.OS === 'web' ? (
@@ -500,7 +1016,7 @@ export default function PdfEditorScreen() {
               <View style={[styles.inputPopup, { left: Math.min(CONTAINER_WIDTH - 200, Math.max(10, activeInput.x)), top: activeInput.y }]}>
                 <TextInput
                   style={styles.popupInput}
-                  placeholder="הקלד טקסט..."
+                  placeholder="טקסט / Text / ጽሑፍ / نص..."
                   value={currentText}
                   onChangeText={setCurrentText}
                   autoFocus
@@ -508,101 +1024,206 @@ export default function PdfEditorScreen() {
                 <TouchableOpacity style={styles.addBtn} onPress={handleAddTextElement}>
                   <Text style={{ color: '#fff', fontWeight: 'bold' }}>הוסף</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#888' }]} onPress={() => setActiveInput(null)}>
+                <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#64748b' }]} onPress={() => setActiveInput(null)}>
                   <Text style={{ color: '#fff' }}>✕</Text>
                 </TouchableOpacity>
               </View>
             )}
           </View>
 
+          <View style={{ marginTop: 12 }}>
+            {renderPaginationBar()}
+          </View>
+
           <View style={styles.actionButtonsRow}>
             <TouchableOpacity style={[styles.actionBtn, styles.previewBtn]} onPress={handlePreviewPdf} disabled={loading}>
-              <Text style={styles.buttonText}>👁️ תצוגה מקדימה</Text>
+              <Text style={styles.buttonText}>{t.preview}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.actionBtn, styles.downloadBtn]} onPress={triggerDownloadProcess} disabled={loading}>
-              <Text style={styles.buttonText}>
-                {currentUser && currentUser.plan !== 'free' ? '⚡ הורדה מהירה (ללא פרסומת)' : '💾 הורד PDF סופי'}
-              </Text>
+              <Text style={styles.buttonText}>{t.download}</Text>
             </TouchableOpacity>
           </View>
 
-          {loading && <ActivityIndicator size="large" color="#0066cc" style={{ marginTop: 15 }} />}
+          {loading && <ActivityIndicator size="large" color="#0052D4" style={{ marginTop: 15 }} />}
         </View>
       )}
 
-      {/* 🔐 Modal הרשמה/התחברות ומסלולי מנוי */}
-      <Modal visible={showAuthModal} transparent animationType="slide">
+      {/* 🖋️ Modal פד חתימה */}
+      <Modal visible={showSignatureModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxWidth: 520 }]}>
+          <View style={[styles.modalCard, { maxWidth: 450 }]}>
+            <Text style={styles.modalTitle}>{t.signModalTitle}</Text>
+
+            {Platform.OS === 'web' ? (
+              <canvas
+                ref={initSignatureCanvas}
+                width={380}
+                height={180}
+                style={styles.signatureCanvasBox}
+              />
+            ) : (
+              <View style={[styles.signatureCanvasBox, { justifyContent: 'center', alignItems: 'center' }]}>
+                <Text>[פד חתימה במגע למובייל]</Text>
+              </View>
+            )}
+
+            <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#cbd5e1', flex: 1 }]} onPress={clearSignatureCanvas}>
+                <Text style={{ color: '#1e293b', fontWeight: 'bold', textAlign: 'center' }}>{t.clear}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a', flex: 2 }]} onPress={saveSignatureAndPlace}>
+                <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>{t.confirmSignature}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowSignatureModal(false)}>
+              <Text style={styles.modalCancelBtnText}>{t.close}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 📺 Modal פרסומת */}
+      <Modal visible={showAdModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{adTitle}</Text>
+            <Text style={styles.modalSubtitle}>{adMessage}</Text>
+
+            <View style={styles.adBannerBox}>
+              <Text style={styles.adPlaceholderText}>[ שטח פרסומת AdSense / Rewarded Ad ]</Text>
+            </View>
+
+            {!isAdFinished ? (
+              <View style={styles.timerBox}>
+                <ActivityIndicator size="small" color="#0052D4" />
+                <Text style={styles.timerText}>זמין בעוד <Text style={styles.timerCount}>{adTimer}</Text> שניות...</Text>
+              </View>
+            ) : (
+              <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAdFinishedAction}>
+                <Text style={styles.modalDownloadBtnText}>✅ המשך כעת</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAdModal(false)}>
+              <Text style={styles.modalCancelBtnText}>ביטול</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🔐 Modal הרשמה ומסלולים */}
+      <Modal visible={showAuthModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxWidth: 540 }]}>
             <Text style={styles.modalTitle}>
-              {authMode === 'register' ? '🎯 הרשמה ובחירת מסלול' : '🔑 התחברות לחשבון'}
+              {authMode === 'register' ? `🎯 הרשמה ל-DocFlow` : '🔑 התחברות'}
             </Text>
 
-            <TextInput
-              style={styles.authInput}
-              placeholder="כתובת מייל"
-              value={authEmail}
-              onChangeText={setAuthEmail}
-              keyboardType="email-address"
-            />
-            <TextInput
-              style={styles.authInput}
-              placeholder="סיסמה"
-              secureTextEntry
-              value={authPassword}
-              onChangeText={setAuthPassword}
-            />
-
-            {/* בחירת מסלול בהרשמה */}
-            {authMode === 'register' && (
-              <View style={styles.plansContainer}>
+            {userAlreadyExistsError && (
+              <View style={styles.userExistsWarningBox}>
+                <Text style={styles.warningTitle}>⚠️ המייל כבר רשום במערכת!</Text>
+                <Text style={styles.warningText}>כתובת המייל "{authEmail}" כבר קיימת ב-DocFlow.</Text>
                 <TouchableOpacity
-                  style={[styles.planCard, selectedPlan === 'free' && styles.selectedPlanCard]}
-                  onPress={() => setSelectedPlan('free')}
+                  style={styles.switchLoginBtn}
+                  onPress={() => {
+                    setUserAlreadyExistsError(false);
+                    setAuthStep(1);
+                    setAuthMode('login');
+                  }}
                 >
-                  <Text style={styles.planName}>Basic</Text>
-                  <Text style={styles.planPrice}>חינם</Text>
-                  <Text style={styles.planDesc}>עם פרסומות</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.planCard, selectedPlan === 'pro' && styles.selectedPlanCard]}
-                  onPress={() => setSelectedPlan('pro')}
-                >
-                  <Text style={styles.planName}>Pro ⚡</Text>
-                  <Text style={styles.planPrice}>₪29/חודש</Text>
-                  <Text style={styles.planDesc}>ללא פרסומות כלל</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.planCard, selectedPlan === 'premium' && styles.selectedPlanCard]}
-                  onPress={() => setSelectedPlan('premium')}
-                >
-                  <Text style={styles.planName}>Premium 👑</Text>
-                  <Text style={styles.planPrice}>₪59/חודש</Text>
-                  <Text style={styles.planDesc}>חתימות + צינזור</Text>
+                  <Text style={styles.switchLoginBtnText}>🔑 לחץ כאן למעבר להתחברות</Text>
                 </TouchableOpacity>
               </View>
             )}
 
-            <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAuthSubmit}>
-              <Text style={styles.modalDownloadBtnText}>
-                {authMode === 'register' ? 'הרשם והתחל' : 'התחבר'}
-              </Text>
-            </TouchableOpacity>
+            {authStep === 1 ? (
+              <>
+                <TextInput
+                  style={styles.authInput}
+                  placeholder="כתובת מייל"
+                  value={authEmail}
+                  onChangeText={(text) => {
+                    setAuthEmail(text);
+                    setUserAlreadyExistsError(false);
+                  }}
+                  keyboardType="email-address"
+                />
+                <TextInput
+                  style={styles.authInput}
+                  placeholder="סיסמה"
+                  secureTextEntry
+                  value={authPassword}
+                  onChangeText={setAuthPassword}
+                />
+                <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAuthStep1}>
+                  <Text style={styles.modalDownloadBtnText}>
+                    {authMode === 'register' ? 'המשך לבחירת שם ומסלול ➔' : 'התחבר'}
+                  </Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TextInput
+                  style={styles.authInput}
+                  placeholder="שם משתמש"
+                  value={authFullName}
+                  onChangeText={setAuthFullName}
+                />
+
+                <Text style={styles.sectionTitle}>{t.selectPlanTitle}</Text>
+                <View style={styles.plansContainer}>
+                  <TouchableOpacity
+                    style={[styles.planCard, selectedPlan === 'free' && styles.selectedPlanCard]}
+                    onPress={() => setSelectedPlan('free')}
+                  >
+                    <Text style={styles.planName}>{t.basicPlan}</Text>
+                    <Text style={styles.planPrice}>חינם</Text>
+                    <Text style={styles.planDesc}>{t.basicPlanDesc}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.planCard, selectedPlan === 'micro_pass' && styles.selectedPlanCard]}
+                    onPress={() => setSelectedPlan('micro_pass')}
+                  >
+                    <Text style={styles.planName}>{t.passPlan}</Text>
+                    <Text style={styles.planPrice}>₪9.90 חד-פעמי</Text>
+                    <Text style={styles.planDesc}>{t.passPlanDesc}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.planCard, selectedPlan === 'premium' && styles.selectedPlanCard]}
+                    onPress={() => setSelectedPlan('premium')}
+                  >
+                    <Text style={styles.planName}>{t.premiumPlan}</Text>
+                    <Text style={styles.planPrice}>₪49/חודש</Text>
+                    <Text style={styles.planDesc}>{t.premiumPlanDesc}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleFinalRegister}>
+                  <Text style={styles.modalDownloadBtnText}>סיום הרשמה והתחל ✅</Text>
+                </TouchableOpacity>
+              </>
+            )}
 
             <TouchableOpacity
-              onPress={() => setAuthMode(authMode === 'register' ? 'login' : 'register')}
-              style={{ marginTop: 10 }}
+              onPress={() => {
+                setUserAlreadyExistsError(false);
+                setAuthStep(1);
+                setAuthMode(authMode === 'register' ? 'login' : 'register');
+              }}
+              style={{ marginTop: 12 }}
             >
-              <Text style={{ color: '#0066cc', fontWeight: 'bold' }}>
+              <Text style={{ color: '#0052D4', fontWeight: 'bold' }}>
                 {authMode === 'register' ? 'כבר נרשמת? התחבר כאן' : 'אין לך חשבון? הרשם כאן'}
               </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowAuthModal(false)}>
-              <Text style={styles.modalCancelBtnText}>סגור</Text>
+              <Text style={styles.modalCancelBtnText}>{t.close}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -612,40 +1233,14 @@ export default function PdfEditorScreen() {
       <Modal visible={showPreviewModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { maxWidth: 640 }]}>
-            <Text style={styles.modalTitle}>👁️ תצוגה מקדימה</Text>
+            <Text style={styles.modalTitle}>{t.preview}</Text>
             {previewImageUri && (
               <View style={styles.previewImageContainer}>
                 <Image source={{ uri: previewImageUri }} style={{ width: '100%', height: 420 }} resizeMode="contain" />
               </View>
             )}
             <TouchableOpacity style={[styles.modalDownloadBtn, { marginTop: 15 }]} onPress={() => setShowPreviewModal(false)}>
-              <Text style={styles.modalDownloadBtnText}>סגור</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 📺 Modal הפרסומת */}
-      <Modal visible={showAdModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>📢 פרסומת חסות</Text>
-            <Text style={styles.modalSubtitle}>צפה בפרסומת כדי להוריד. (שדרג ל-Pro להורדה מיידית!)</Text>
-            <View style={styles.adBannerBox}>
-              <Text style={styles.adPlaceholderText}>[ כאן מופיעה הפרסומת שלך ]</Text>
-            </View>
-            {!isAdFinished ? (
-              <View style={styles.timerBox}>
-                <ActivityIndicator size="small" color="#0066cc" />
-                <Text style={styles.timerText}>זמין בעוד <Text style={styles.timerCount}>{adTimer}</Text> שניות...</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.modalDownloadBtn} onPress={executeFinalDownload}>
-                <Text style={styles.modalDownloadBtnText}>✅ הורד קובץ כעת</Text>
-              </TouchableOpacity>
-            )}
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAdModal(false)}>
-              <Text style={styles.modalCancelBtnText}>ביטול</Text>
+              <Text style={styles.modalDownloadBtnText}>{t.close}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -748,6 +1343,14 @@ function DraggableItem({
           </Text>
           {isSelected && <View style={styles.baselineGuide} />}
         </>
+      )}
+
+      {element.type === 'signature' && el.imageUri && (
+        <Image
+          source={{ uri: el.imageUri }}
+          style={{ width: el.width, height: el.height }}
+          resizeMode="contain"
+        />
       )}
 
       {element.type === 'highlight' && (
@@ -939,28 +1542,81 @@ function _uint8ArrayToBase64(uint8: Uint8Array): string {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, paddingTop: 40, backgroundColor: '#f0f2f5', alignItems: 'center', minHeight: '100%' },
-  headerBar: { width: '100%', maxWidth: CONTAINER_WIDTH, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1a1a1a' },
-  authBtn: { backgroundColor: '#0066cc', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6 },
-  authBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
-  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  userEmailText: { fontSize: 13, fontWeight: 'bold', color: '#333' },
-  userPlanBadge: { backgroundColor: '#888', color: '#fff', fontSize: 10, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 },
-  paidPlanBadge: { backgroundColor: '#2e7d32' },
-  logoutText: { color: '#d32f2f', fontSize: 12, fontWeight: 'bold', marginRight: 4 },
-
-  button: { backgroundColor: '#0066cc', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  buttonText: { color: '#ffffff', fontSize: 15, fontWeight: 'bold' },
-  editorArea: { alignItems: 'center', marginTop: 15 },
+  container: { padding: 16, paddingTop: 20, backgroundColor: '#f8fafc', alignItems: 'center', minHeight: '100%' },
   
-  toolbarRow: { flexDirection: 'row', gap: 8, marginBottom: 12, backgroundColor: '#ffffff', padding: 6, borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0' },
-  toolBtn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6, backgroundColor: '#f5f5f5' },
-  activeToolBtn: { backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#0066cc' },
-  toolBtnText: { fontSize: 13, fontWeight: 'bold', color: '#333' },
+  // 🎨 Logo & Header
+  headerBar: { width: '100%', maxWidth: CONTAINER_WIDTH, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  logoBadgeIcon: { backgroundColor: '#0052D4', paddingVertical: 4, paddingHorizontal: 7, borderRadius: 6 },
+  logoBadgeText: { color: '#ffffff', fontWeight: '900', fontSize: 11 },
+  logoText: { fontSize: 20, fontWeight: '900', color: '#0f172a', letterSpacing: -0.5 },
+  logoHighlight: { color: '#0052D4' },
 
-  pdfViewerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, position: 'relative', overflow: 'hidden' },
-  mobilePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e9ecef' },
+  langBar: { flexDirection: 'row', gap: 2, backgroundColor: '#f1f5f9', borderRadius: 8, padding: 2 },
+  langBtn: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },
+  activeLangBtn: { backgroundColor: '#0052D4' },
+  langText: { fontSize: 11, fontWeight: 'bold', color: '#64748b' },
+  activeLangText: { color: '#ffffff' },
+
+  authBtn: { backgroundColor: '#0052D4', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
+  authBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
+  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  userEmailText: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
+  userPlanBadge: { backgroundColor: '#64748b', color: '#fff', fontSize: 9, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 },
+  paidPlanBadge: { backgroundColor: '#16a34a' },
+  logoutText: { color: '#dc2626', fontSize: 11, fontWeight: 'bold', marginRight: 2 },
+
+  // 📢 Ad Slots
+  topAdBannerSlot: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 10, marginBottom: 14, alignItems: 'center' },
+  adSlotLabel: { fontSize: 9, fontWeight: 'bold', color: '#3b82f6', textTransform: 'uppercase', marginBottom: 2, alignSelf: 'flex-start' },
+  topAdBannerText: { fontSize: 12, color: '#1e40af', fontWeight: '600', textAlign: 'center' },
+
+  // 🏠 Hero Section
+  heroLandingCard: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#ffffff', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
+  heroTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 8 },
+  heroSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
+  heroUploadBtn: { backgroundColor: '#0052D4', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 10, width: '100%', alignItems: 'center', marginBottom: 24, elevation: 3 },
+  heroUploadBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
+  
+  featureGrid: { flexDirection: 'row', gap: 8, width: '100%' },
+  featureItem: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
+  featureIcon: { fontSize: 22, marginBottom: 4 },
+  featureTitle: { fontSize: 12, fontWeight: 'bold', color: '#1e293b', marginBottom: 2, textAlign: 'center' },
+  featureDesc: { fontSize: 10, color: '#64748b', textAlign: 'center' },
+
+  // 📝 Editor & Toolbar המשודרג
+  editorArea: { alignItems: 'center', marginTop: 4, width: '100%', maxWidth: CONTAINER_WIDTH },
+  changeFileBtn: { backgroundColor: '#e2e8f0', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, marginBottom: 12 },
+  changeFileBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
+  
+  toolbarRow: { flexDirection: 'row', gap: 6, marginBottom: 12, backgroundColor: '#ffffff', padding: 6, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%', justifyContent: 'space-around' },
+  toolBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderContent: '#e2e8f0', borderWidth: 1 },
+  activeToolBtn: { backgroundColor: '#0052D4', borderColor: '#0052D4' },
+  toolBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
+  activeToolBtnText: { color: '#ffffff' },
+
+  signatureCanvasBox: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    cursor: 'crosshair',
+    touchAction: 'none',
+  },
+
+  button: { backgroundColor: '#0052D4', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  buttonText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+
+  // 📄 Pagination המשודרג
+  paginationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#cbd5e1', width: '100%' },
+  pageBtn: { backgroundColor: '#0052D4', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6 },
+  disabledBtn: { backgroundColor: '#cbd5e1' },
+  pageBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
+  pageBadgeTextContainer: { backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 },
+  pageIndicatorText: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
+
+  pdfViewerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, position: 'relative', overflow: 'hidden' },
+  mobilePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e2e8f0' },
   
   draggableItemWrapper: { position: 'absolute', alignSelf: 'flex-start', zIndex: 10, cursor: 'move', // @ts-ignore
     userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' },
@@ -968,45 +1624,61 @@ const styles = StyleSheet.create({
     userSelect: 'none', WebkitUserSelect: 'none' },
   highlightBox: { backgroundColor: 'rgba(255, 235, 50, 0.45)' },
   redactBox: { backgroundColor: '#000000' },
-  selectedBoxBorder: { borderWidth: 1, borderColor: '#0066cc', borderStyle: 'dashed' },
-  baselineGuide: { position: 'absolute', bottom: -2, left: 0, right: 0, height: 2, backgroundColor: '#0066cc' },
+  selectedBoxBorder: { borderWidth: 1, borderColor: '#0052D4', borderStyle: 'dashed' },
+  baselineGuide: { position: 'absolute', bottom: -2, left: 0, right: 0, height: 2, backgroundColor: '#0052D4' },
   
-  floatingActionBar: { position: 'absolute', top: -32, left: 0, backgroundColor: '#333333', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 99 },
-  actionBadgeBtn: { backgroundColor: '#555555', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  deleteBadgeBtn: { backgroundColor: '#d32f2f' },
+  floatingActionBar: { position: 'absolute', top: -32, left: 0, backgroundColor: '#1e293b', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 99 },
+  actionBadgeBtn: { backgroundColor: '#334155', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
+  deleteBadgeBtn: { backgroundColor: '#dc2626' },
   actionBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
   fontSizeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
 
-  inputPopup: { position: 'absolute', backgroundColor: '#fff', padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#0066cc', flexDirection: 'row', gap: 6, zIndex: 999 },
-  popupInput: { borderWidth: 1, borderColor: '#ccc', borderRadius: 4, paddingHorizontal: 8, width: 130, height: 32, fontSize: 12, textAlign: 'right' },
-  addBtn: { backgroundColor: '#0066cc', paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center', borderRadius: 4 },
-  actionButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 16 },
-  actionBtn: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8 },
-  previewBtn: { backgroundColor: '#ff9800' },
-  downloadBtn: { backgroundColor: '#2e7d32' },
+  inputPopup: { position: 'absolute', backgroundColor: '#fff', padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#0052D4', flexDirection: 'row', gap: 6, zIndex: 999 },
+  popupInput: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 4, paddingHorizontal: 8, width: 150, height: 32, fontSize: 12, textAlign: 'right' },
+  addBtn: { backgroundColor: '#0052D4', paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center', borderRadius: 4 },
+  actionButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 16, width: '100%' },
+  actionBtn: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
+  previewBtn: { backgroundColor: '#d97706' },
+  downloadBtn: { backgroundColor: '#16a34a' },
 
-  // Auth & Plans Modal
+  // Modals & Warnings
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, alignItems: 'center', elevation: 8 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#1a1a1a', marginBottom: 12 },
-  modalSubtitle: { fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 16 },
-  authInput: { width: '100%', borderWidth: 1, borderColor: '#ccc', borderRadius: 8, paddingHorizontal: 12, height: 40, marginBottom: 10, textAlign: 'right' },
-  
-  plansContainer: { flexDirection: 'row', gap: 8, width: '100%', marginVertical: 14 },
-  planCard: { flex: 1, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, padding: 10, alignItems: 'center', backgroundColor: '#fafafa' },
-  selectedPlanCard: { borderColor: '#0066cc', backgroundColor: '#e3f2fd', borderWidth: 2 },
-  planName: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  planPrice: { fontSize: 12, fontWeight: 'bold', color: '#0066cc', marginVertical: 4 },
-  planDesc: { fontSize: 10, color: '#666', textAlign: 'center' },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },
+  modalSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 16 },
+  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#1e293b', marginTop: 10, marginBottom: 8, alignSelf: 'flex-start' },
+  authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 40, marginBottom: 10, textAlign: 'right' },
 
-  previewImageContainer: { width: '100%', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
-  adBannerBox: { width: '100%', height: 180, backgroundColor: '#f5f5f5', borderWidth: 2, borderColor: '#e0e0e0', borderStyle: 'dashed', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  adPlaceholderText: { fontSize: 15, fontWeight: 'bold', color: '#888' },
+  userExistsWarningBox: {
+    width: '100%',
+    backgroundColor: '#fef2f2',
+    borderWidth: 1,
+    borderColor: '#fca5a5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 14,
+    alignItems: 'center',
+  },
+  warningTitle: { fontSize: 14, fontWeight: 'bold', color: '#991b1b', marginBottom: 4 },
+  warningText: { fontSize: 12, color: '#7f1d1d', marginBottom: 8, textAlign: 'center' },
+  switchLoginBtn: { backgroundColor: '#dc2626', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
+  switchLoginBtnText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+
+  plansContainer: { flexDirection: 'row', gap: 8, width: '100%', marginVertical: 14 },
+  planCard: { flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 10, alignItems: 'center', backgroundColor: '#f8fafc' },
+  selectedPlanCard: { borderColor: '#0052D4', backgroundColor: '#eff6ff', borderWidth: 2 },
+  planName: { fontSize: 13, fontWeight: 'bold', color: '#0f172a' },
+  planPrice: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', marginVertical: 4 },
+  planDesc: { fontSize: 10, color: '#64748b', textAlign: 'center' },
+
+  previewImageContainer: { width: '100%', backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
+  adBannerBox: { width: '100%', height: 180, backgroundColor: '#f8fafc', borderWidth: 2, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  adPlaceholderText: { fontSize: 15, fontWeight: 'bold', color: '#94a3b8' },
   timerBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  timerText: { fontSize: 14, fontWeight: 'bold', color: '#333' },
-  timerCount: { color: '#0066cc', fontSize: 16 },
-  modalDownloadBtn: { backgroundColor: '#2e7d32', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, width: '100%', alignItems: 'center' },
+  timerText: { fontSize: 14, fontWeight: 'bold', color: '#334155' },
+  timerCount: { color: '#0052D4', fontSize: 16 },
+  modalDownloadBtn: { backgroundColor: '#16a34a', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, width: '100%', alignItems: 'center' },
   modalDownloadBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
   modalCancelBtn: { paddingVertical: 8, paddingHorizontal: 16 },
-  modalCancelBtnText: { color: '#d32f2f', fontSize: 13, fontWeight: 'bold' },
+  modalCancelBtnText: { color: '#dc2626', fontSize: 13, fontWeight: 'bold' },
 });
