@@ -19,6 +19,10 @@ import {
   View,
 } from 'react-native';
 
+// 🌐 הגדרת כתובת השרת (API)
+const API_URL = process.env.EXPO_PUBLIC_API_URL;
+const CONTAINER_WIDTH = 600;
+
 type ToolType = 'text' | 'highlight' | 'redact' | 'signature';
 type PlanType = 'free' | 'micro_pass' | 'premium';
 type Language = 'he' | 'en' | 'ar' | 'am';
@@ -51,9 +55,6 @@ interface PdfDimensions {
   height: number;
   aspectRatio: number;
 }
-
-const CONTAINER_WIDTH = 600;
-const API_URL = 'http://localhost:5000/api';
 
 const I18N = {
   he: {
@@ -88,7 +89,7 @@ const I18N = {
     passPlanDesc: '10 עריכות ושמירות',
     premiumPlan: 'Premium 👑',
     premiumPlanDesc: 'ללא הגבלה כלל',
-    guestNotice: 'עורכים בשפה שלך בכל מקלדת (עברית, ערבית, אמהרית, סינית וכו\')',
+    guestNotice: "עורכים בשפה שלך בכל מקלדת (עברית, ערבית, אמהרית, סינית וכו')",
   },
   en: {
     heroTitle: 'PDF Edit, Fill & Sign 📄✍️',
@@ -496,7 +497,7 @@ export default function PdfEditorScreen() {
 
     if (currentUser) {
       try {
-        const res = await fetch(`${API_URL}/user/use-edit-credit`, {
+        const res = await fetch(`${API_URL}/api/user/use-edit-credit`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId: currentUser.id }),
@@ -592,7 +593,7 @@ export default function PdfEditorScreen() {
     } else {
       setLoading(true);
       try {
-        const res = await fetch(`${API_URL}/auth/login`, {
+        const res = await fetch(`${API_URL}/api/auth/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: authEmail, password: authPassword }),
@@ -623,7 +624,7 @@ export default function PdfEditorScreen() {
     setLoading(true);
 
     try {
-      const res = await fetch(`${API_URL}/auth/register`, {
+      const res = await fetch(`${API_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -865,7 +866,7 @@ export default function PdfEditorScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* 🌟 Header משודרג ונגיש */}
+      {/* 🌟 Header משודרג */}
       <View style={styles.headerBar}>
         <DocFlowLogo />
 
@@ -947,7 +948,7 @@ export default function PdfEditorScreen() {
             <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
           </TouchableOpacity>
 
-          {/* סרגל כלים בולט */}
+          {/* סרגל כלים */}
           <View style={styles.toolbarRow}>
             <TouchableOpacity
               style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
@@ -1345,10 +1346,10 @@ function DraggableItem({
         </>
       )}
 
-      {element.type === 'signature' && el.imageUri && (
+      {element.type === 'signature' && element.imageUri && (
         <Image
-          source={{ uri: el.imageUri }}
-          style={{ width: el.width, height: el.height }}
+          source={{ uri: element.imageUri }}
+          style={{ width: element.width, height: element.height }}
           resizeMode="contain"
         />
       )}
@@ -1544,7 +1545,6 @@ function _uint8ArrayToBase64(uint8: Uint8Array): string {
 const styles = StyleSheet.create({
   container: { padding: 16, paddingTop: 20, backgroundColor: '#f8fafc', alignItems: 'center', minHeight: '100%' },
   
-  // 🎨 Logo & Header
   headerBar: { width: '100%', maxWidth: CONTAINER_WIDTH, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   logoBadgeIcon: { backgroundColor: '#0052D4', paddingVertical: 4, paddingHorizontal: 7, borderRadius: 6 },
@@ -1566,12 +1566,10 @@ const styles = StyleSheet.create({
   paidPlanBadge: { backgroundColor: '#16a34a' },
   logoutText: { color: '#dc2626', fontSize: 11, fontWeight: 'bold', marginRight: 2 },
 
-  // 📢 Ad Slots
   topAdBannerSlot: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 10, marginBottom: 14, alignItems: 'center' },
   adSlotLabel: { fontSize: 9, fontWeight: 'bold', color: '#3b82f6', textTransform: 'uppercase', marginBottom: 2, alignSelf: 'flex-start' },
   topAdBannerText: { fontSize: 12, color: '#1e40af', fontWeight: '600', textAlign: 'center' },
 
-  // 🏠 Hero Section
   heroLandingCard: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#ffffff', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
   heroTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 8 },
   heroSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
@@ -1584,13 +1582,12 @@ const styles = StyleSheet.create({
   featureTitle: { fontSize: 12, fontWeight: 'bold', color: '#1e293b', marginBottom: 2, textAlign: 'center' },
   featureDesc: { fontSize: 10, color: '#64748b', textAlign: 'center' },
 
-  // 📝 Editor & Toolbar המשודרג
   editorArea: { alignItems: 'center', marginTop: 4, width: '100%', maxWidth: CONTAINER_WIDTH },
   changeFileBtn: { backgroundColor: '#e2e8f0', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, marginBottom: 12 },
   changeFileBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
   
   toolbarRow: { flexDirection: 'row', gap: 6, marginBottom: 12, backgroundColor: '#ffffff', padding: 6, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%', justifyContent: 'space-around' },
-  toolBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderContent: '#e2e8f0', borderWidth: 1 },
+  toolBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderColor: '#e2e8f0', borderWidth: 1 },
   activeToolBtn: { backgroundColor: '#0052D4', borderColor: '#0052D4' },
   toolBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
   activeToolBtnText: { color: '#ffffff' },
@@ -1607,7 +1604,6 @@ const styles = StyleSheet.create({
   button: { backgroundColor: '#0052D4', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
   buttonText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
 
-  // 📄 Pagination המשודרג
   paginationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#cbd5e1', width: '100%' },
   pageBtn: { backgroundColor: '#0052D4', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6 },
   disabledBtn: { backgroundColor: '#cbd5e1' },
@@ -1618,10 +1614,26 @@ const styles = StyleSheet.create({
   pdfViewerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, position: 'relative', overflow: 'hidden' },
   mobilePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e2e8f0' },
   
-  draggableItemWrapper: { position: 'absolute', alignSelf: 'flex-start', zIndex: 10, cursor: 'move', // @ts-ignore
-    userSelect: 'none', WebkitUserSelect: 'none', touchAction: 'none' },
-  overlayText: { color: '#000', fontWeight: 'bold', fontFamily: 'Arial, sans-serif', paddingHorizontal: 0, margin: 0, // @ts-ignore
-    userSelect: 'none', WebkitUserSelect: 'none' },
+  draggableItemWrapper: {
+    position: 'absolute',
+    alignSelf: 'flex-start',
+    zIndex: 10,
+    cursor: 'move',
+    // @ts-ignore
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+    touchAction: 'none',
+  },
+  overlayText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontFamily: 'Arial, sans-serif',
+    paddingHorizontal: 0,
+    margin: 0,
+    // @ts-ignore
+    userSelect: 'none',
+    WebkitUserSelect: 'none',
+  },
   highlightBox: { backgroundColor: 'rgba(255, 235, 50, 0.45)' },
   redactBox: { backgroundColor: '#000000' },
   selectedBoxBorder: { borderWidth: 1, borderColor: '#0052D4', borderStyle: 'dashed' },
@@ -1641,7 +1653,6 @@ const styles = StyleSheet.create({
   previewBtn: { backgroundColor: '#d97706' },
   downloadBtn: { backgroundColor: '#16a34a' },
 
-  // Modals & Warnings
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, alignItems: 'center', elevation: 8 },
   modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },

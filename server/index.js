@@ -1,3 +1,6 @@
+
+
+require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
@@ -5,31 +8,37 @@ const jwt = require('jsonwebtoken');
 const cors = require('cors');
 
 const app = express();
-app.use(express.json());
+
 app.use(cors());
+app.use(express.json());
 
-const JWT_SECRET = 'docflow_super_secret_key_123';
+const JWT_SECRET = process.env.JWT_SECRET || 'local_jwt_secret_123';
+const PORT = process.env.PORT || 5000;
 
-// התחברות ל-PostgreSQL המקומי שלך
+// התחברות ל-PostgreSQL המקומי
 const pool = new Pool({
-  user: 'postgres',        // שם המשתמש ב-Postgres שלך
-  host: 'localhost',
-  database: 'docflow_db',
-  password: '6060068', // 👈 הכנס סיסמה שלך
-  port: 5432,
+  user: process.env.DB_USER || 'postgres',
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'docflow_db',
+  password: process.env.DB_PASS,
 });
 
-// 1. הרשמה (עם לוגים מפורטים וזיהוי משתמש קיים)
+// 1. הרשמה
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, fullName, plan } = req.body;
   
   console.log(`[Register Attempt] Email: ${email}`);
 
+  if (!email || !password) {
+    return res.status(400).json({ error: 'חובה להזין מייל וסיסמה' });
+  }
+
   try {
     const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     
     if (userCheck.rows.length > 0) {
-      console.log(`⚠️ [Register Warning] User already exists in Postgres: ${email}`);
+      console.log(`⚠️ [Register Warning] User already exists: ${email}`);
       return res.status(400).json({ 
         error: 'משתמש עם מייל זה כבר קיים במערכת',
         userExists: true 
@@ -39,49 +48,23 @@ app.post('/api/auth/register', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, 10);
     const selectedPlan = plan || 'free';
     const userName = fullName || email.split('@')[0];
+    const initialPassCredits = selectedPlan === 'micro_pass' ? 10 : 0;
 
     const newUser = await pool.query(
-      'INSERT INTO users (email, password_hash, full_name, plan) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, plan',
-      [email, hashedPassword, userName, selectedPlan]
+      `INSERT INTO users (email, password_hash, full_name, plan, pass_credits, edits_count) 
+       VALUES ($1, $2, $3, $4, $5, 0) 
+       RETURNING id, email, full_name AS "fullName", plan, pass_credits AS "passCredits", edits_count AS "editsCount"`,
+      [email, hashedPassword, userName, selectedPlan, initialPassCredits]
     );
 
-    console.log(`✅ [Register Success] User created: ${email} (ID: ${newUser.rows[0].id})`);
+    const user = newUser.rows[0];
+    console.log(`✅ [Register Success] User created: ${email} (ID: ${user.id})`);
 
-    const token = jwt.sign({ userId: newUser.rows[0].id }, JWT_SECRET, { expiresIn: '30d' });
+    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '30d' });
 
-    res.json({ token, user: newUser.rows[0] });
+    res.json({ token, user });
   } catch (err) {
     console.error('❌ [Register Error]:', err);
-    res.status(500).json({ error: 'שגיאת שרת בהרשמה' });
-  }
-});// 1. הרשמה
-app.post('/api/auth/register', async (req, res) => {
-  const { email, password, fullName, plan } = req.body;
-  
-  try {
-    const userCheck = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-    
-    if (userCheck.rows.length > 0) {
-      return res.status(400).json({ 
-        error: 'משתמש עם מייל זה כבר קיים במערכת',
-        userExists: true 
-      });
-    }
-
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const selectedPlan = plan || 'free';
-    const userName = fullName || email.split('@')[0];
-
-    const newUser = await pool.query(
-      'INSERT INTO users (email, password_hash, full_name, plan) VALUES ($1, $2, $3, $4) RETURNING id, email, full_name, plan',
-      [email, hashedPassword, userName, selectedPlan]
-    );
-
-    const token = jwt.sign({ userId: newUser.rows[0].id }, JWT_SECRET, { expiresIn: '30d' });
-
-    res.json({ token, user: newUser.rows[0] });
-  } catch (err) {
-    console.error(err);
     res.status(500).json({ error: 'שגיאת שרת בהרשמה' });
   }
 });
@@ -89,6 +72,10 @@ app.post('/api/auth/register', async (req, res) => {
 // 2. התחברות
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'חובה להזין מייל וסיסמה' });
+  }
+
   try {
     const userRes = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userRes.rows.length === 0) {
@@ -105,12 +92,22 @@ app.post('/api/auth/login', async (req, res) => {
 
     res.json({
       token,
-      user: { id: user.id, email: user.email, full_name: user.full_name, plan: user.plan },
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        fullName: user.full_name, 
+        plan: user.plan,
+        passCredits: user.pass_credits || 0,
+        editsCount: user.edits_count || 0 
+      },
     });
   } catch (err) {
+    console.error('❌ [Login Error]:', err);
     res.status(500).json({ error: 'שגיאת שרת בהתחברות' });
   }
 });
+
+
 
 // 3. עדכון מסלול מנוי
 app.post('/api/user/update-plan', async (req, res) => {
@@ -122,11 +119,12 @@ app.post('/api/user/update-plan', async (req, res) => {
     );
     res.json({ user: updatedUser.rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'שגיאה בעדכון המסלול' });
   }
 });
 
-// עדכון פרופיל משתמש (שם מלא / מסלול)
+// 4. עדכון פרופיל משתמש (שם מלא / מסלול)
 app.post('/api/user/update-profile', async (req, res) => {
   const { userId, fullName, plan } = req.body;
   try {
@@ -136,15 +134,15 @@ app.post('/api/user/update-profile', async (req, res) => {
     );
     res.json({ user: updatedUser.rows[0] });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'שגיאה בעדכון הפרופיל' });
   }
 });
 
-// שמירת מסמך חדש / טיוטה לעריכה עתידית
+// 5. שמירת מסמך חדש / טיוטה לעריכה עתידית
 app.post('/api/documents/save', async (req, res) => {
   const { userId, title, elementsJson } = req.body;
   try {
-    // בדיקת מנוי והגבלת שמירות
     const userRes = await pool.query('SELECT plan FROM users WHERE id = $1', [userId]);
     const plan = userRes.rows[0]?.plan || 'free';
 
@@ -171,7 +169,7 @@ app.post('/api/documents/save', async (req, res) => {
   }
 });
 
-// שליפת המסמכים השמורים של משתמש
+// 6. שליפת המסמכים השמורים של משתמש
 app.get('/api/documents/user/:userId', async (req, res) => {
   try {
     const docs = await pool.query(
@@ -180,12 +178,12 @@ app.get('/api/documents/user/:userId', async (req, res) => {
     );
     res.json({ documents: docs.rows });
   } catch (err) {
-    res.status(500).json({ error: 'שגיאה שטעינת הקבצים' });
+    console.error(err);
+    res.status(500).json({ error: 'שגיאה בטעינת הקבצים' });
   }
 });
 
-
-// בדיקת ועדכון מכסת עריכות לפני הורדה
+// 7. בדיקת ועדכון מכסת עריכות לפני הורדה
 app.post('/api/user/use-edit-credit', async (req, res) => {
   const { userId } = req.body;
   
@@ -218,7 +216,7 @@ app.post('/api/user/use-edit-credit', async (req, res) => {
     if (user.plan === 'free') {
       if (user.edits_count < 3) {
         await pool.query('UPDATE users SET edits_count = edits_count + 1 WHERE id = $1', [userId]);
-        return res.json({ allowed: true, plan: 'free', remainingEdits: 2 - user.edits_count });
+        return res.json({ allowed: true, plan: 'free', remainingEdits: 2 - (user.edits_count || 0) });
       } else {
         return res.status(403).json({ 
           error: 'הגעת למכסת 3 העריכות החינמיות לחודש זה!',
@@ -227,12 +225,12 @@ app.post('/api/user/use-edit-credit', async (req, res) => {
       }
     }
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: 'שגיאה בשרת' });
   }
 });
 
-
-
-app.listen(5000, () => {
-  console.log('🚀 DocFlow Server runs on http://localhost:5000');
+// הפעלת השרת
+app.listen(PORT, () => {
+  console.log(`🚀 DocFlow Server runs on http://localhost:${PORT}`);
 });
