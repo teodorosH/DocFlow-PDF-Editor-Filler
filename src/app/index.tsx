@@ -1,6 +1,6 @@
 import { loadPDFDocument } from '@/utils/pdfLoader';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -12,16 +12,18 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { WebView } from 'react-native-webview';
 
-// 🌐 הגדרת כתובת השרת (API)
-const API_URL = process.env.EXPO_PUBLIC_API_URL;
-const CONTAINER_WIDTH = 600;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://docflow.teoplatform.com';
 
 type ToolType = 'text' | 'highlight' | 'redact' | 'signature';
 type PlanType = 'free' | 'micro_pass' | 'premium';
@@ -73,6 +75,8 @@ const I18N = {
     preview: '👁️ תצוגה מקדימה',
     download: '💾 הורד PDF סופי',
     loginRegister: '🔑 התחבר / הרשם',
+    login: 'התחבר',
+    register: 'הרשמה',
     logout: 'יציאה',
     prevPage: '◀ עמוד קודם',
     nextPage: 'עמוד הבא ▶',
@@ -90,6 +94,13 @@ const I18N = {
     premiumPlan: 'Premium 👑',
     premiumPlanDesc: 'ללא הגבלה כלל',
     guestNotice: "עורכים בשפה שלך בכל מקלדת (עברית, ערבית, אמהרית, סינית וכו')",
+    emailPlaceholder: 'כתובת מייל',
+    passwordPlaceholder: 'סיסמה',
+    fullNamePlaceholder: 'שם מלא',
+    alreadyRegistered: 'כבר נרשמת? התחבר כאן',
+    noAccountYet: 'אין לך חשבון? הרשם כאן',
+    continueToPlan: 'המשך לבחירת מסלול ➔',
+    finishRegister: 'סיום הרשמה והתחל ✅',
   },
   en: {
     heroTitle: 'PDF Edit, Fill & Sign 📄✍️',
@@ -107,6 +118,8 @@ const I18N = {
     preview: '👁️ Preview',
     download: '💾 Download PDF',
     loginRegister: '🔑 Login / Register',
+    login: 'Login',
+    register: 'Register',
     logout: 'Logout',
     prevPage: '◀ Previous',
     nextPage: 'Next ▶',
@@ -124,6 +137,13 @@ const I18N = {
     premiumPlan: 'Premium 👑',
     premiumPlanDesc: 'Unlimited access',
     guestNotice: 'Supports all keyboards and languages natively (Hebrew, Arabic, Amharic, Chinese, etc.)',
+    emailPlaceholder: 'Email address',
+    passwordPlaceholder: 'Password',
+    fullNamePlaceholder: 'Full name',
+    alreadyRegistered: 'Already have an account? Login',
+    noAccountYet: "Don't have an account? Register",
+    continueToPlan: 'Continue to select plan ➔',
+    finishRegister: 'Complete Registration ✅',
   },
   ar: {
     heroTitle: 'تعديل وتعبئة وتوقيع PDF 📄✍️',
@@ -141,6 +161,8 @@ const I18N = {
     preview: '👁️ معاينة',
     download: '💾 تحميل PDF',
     loginRegister: '🔑 تسجيل الدخول',
+    login: 'دخول',
+    register: 'تسجيل جديد',
     logout: 'خروج',
     prevPage: '◀ السابق',
     nextPage: 'التالي ▶',
@@ -158,6 +180,13 @@ const I18N = {
     premiumPlan: 'ممتاز 👑',
     premiumPlanDesc: 'بلا حدود',
     guestNotice: 'يدعم جميع اللغات ولوحات المفاتيح تلقائياً',
+    emailPlaceholder: 'البريد الإلكتروني',
+    passwordPlaceholder: 'كلمة المرور',
+    fullNamePlaceholder: 'الاسم الكامل',
+    alreadyRegistered: 'لديك حساب بالفعل؟ تسجيل الدخول',
+    noAccountYet: 'ليس لديك حساب؟ سجل الآن',
+    continueToPlan: 'متابعة لاختيار الخطة ➔',
+    finishRegister: 'إكمال التسجيل ✅',
   },
   am: {
     heroTitle: 'ፒዲኤፍ ማስተካከል፣ መሙላት እና መፈረም 📄✍️',
@@ -175,6 +204,8 @@ const I18N = {
     preview: '👁️ ቅድመ እይታ',
     download: '💾 ፒዲኤፍ አውርድ',
     loginRegister: '🔑 ግባ / ተመዝገብ',
+    login: 'ግባ',
+    register: 'ተመዝገብ',
     logout: 'ውጣ',
     prevPage: '◀ የቀደመው ገጽ',
     nextPage: 'ቀጣይ ገጽ ▶',
@@ -192,6 +223,13 @@ const I18N = {
     premiumPlan: 'ፕሪሚየም 👑',
     premiumPlanDesc: 'ያልተገደበ',
     guestNotice: 'በማንኛውም ቋንቋ እና የቁልፍ ሰሌዳ ይሰራሉ',
+    emailPlaceholder: 'ኢሜይል',
+    passwordPlaceholder: 'የይለፍ ቃል',
+    fullNamePlaceholder: 'ሙሉ ስም',
+    alreadyRegistered: 'መለያ አለዎት? ይግቡ',
+    noAccountYet: 'መለያ የለዎትም? ይመዝገቡ',
+    continueToPlan: 'ወደ ዕቅድ ምርጫ ቀጥል ➔',
+    finishRegister: 'ምዝገባ ጨርስ ✅',
   },
 };
 
@@ -206,7 +244,85 @@ function DocFlowLogo() {
   );
 }
 
+// 🚀 פונקציית חילוץ חסינה למנוע ה-PDF
+async function getPdfLib() {
+  const pdfLibModule = await loadPDFDocument();
+  if (!pdfLibModule) throw new Error('מנוע ה-PDF לא נטען');
+
+  const PDFDocument = pdfLibModule.PDFDocument || pdfLibModule.default?.PDFDocument || pdfLibModule;
+  const rgb = pdfLibModule.rgb || pdfLibModule.default?.rgb || ((r: number, g: number, b: number) => ({ type: 'RGB', red: r, green: g, blue: b }));
+
+  return { PDFDocument, rgb };
+}
+
+// 🚀 המרת Base64 ל-ArrayBuffer חסינה ללא תלות ב-atob בדפדפן/מובייל
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+
+function _base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const cleanBase64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
+  const len = cleanBase64.length;
+  let bufferLength = len * 0.75;
+  if (cleanBase64.endsWith('==')) bufferLength -= 2;
+  else if (cleanBase64.endsWith('=')) bufferLength -= 1;
+
+  const bytes = new Uint8Array(bufferLength);
+  let p = 0;
+  for (let i = 0; i < len; i += 4) {
+    const encoded1 = BASE64_CHARS.indexOf(cleanBase64[i]);
+    const encoded2 = BASE64_CHARS.indexOf(cleanBase64[i + 1]);
+    const encoded3 = BASE64_CHARS.indexOf(cleanBase64[i + 2]);
+    const encoded4 = BASE64_CHARS.indexOf(cleanBase64[i + 3]);
+
+    bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
+    if (encoded3 !== 64 && encoded3 !== -1) {
+      bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
+    }
+    if (encoded4 !== 64 && encoded4 !== -1) {
+      bytes[p++] = ((encoded3 & 3) << 6) | encoded4;
+    }
+  }
+  return bytes.buffer;
+}
+
+// 🚀 המרת Uint8Array ל-Base64 חסינה ללא תלות ב-btoa בדפדפן/מובייל
+function _uint8ArrayToBase64(bytes: Uint8Array): string {
+  let base64 = '';
+  const len = bytes.length;
+  for (let i = 0; i < len; i += 3) {
+    const b1 = bytes[i];
+    const b2 = i + 1 < len ? bytes[i + 1] : 0;
+    const b3 = i + 2 < len ? bytes[i + 2] : 0;
+
+    const c1 = b1 >> 2;
+    const c2 = ((b1 & 3) << 4) | (b2 >> 4);
+    const c3 = ((b2 & 15) << 2) | (b3 >> 6);
+    const c4 = b3 & 63;
+
+    if (i + 1 >= len) {
+      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + '==';
+    } else if (i + 2 >= len) {
+      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + BASE64_CHARS.charAt(c3) + '=';
+    } else {
+      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + BASE64_CHARS.charAt(c3) + BASE64_CHARS.charAt(c4);
+    }
+  }
+  return base64;
+}
+
 export default function PdfEditorScreen() {
+  const { width: windowWidth } = useWindowDimensions();
+  const BASE_CONTAINER_WIDTH = Math.min(windowWidth - 24, 600);
+
+  // 🔎 זום דינמי למסמך
+  const [zoomScale, setZoomScale] = useState<number>(1.0);
+  const CONTAINER_WIDTH = BASE_CONTAINER_WIDTH * zoomScale;
+
+  // 🔤 גודל פונט ברירת מחדל לטקסט חדש
+  const [defaultFontSize, setDefaultFontSize] = useState<number>(15);
+
+  // 🔒 נעילת גלילת הרקע בזמן גרירת אלמנט
+  const [isScrollEnabled, setIsScrollEnabled] = useState<boolean>(true);
+
   const [lang, setLang] = useState<Language>('he');
   const t = I18N[lang];
 
@@ -215,10 +331,12 @@ export default function PdfEditorScreen() {
   const [pdfDimensions, setPdfDimensions] = useState<PdfDimensions | null>(null);
   const [numPages, setNumPages] = useState<number>(1);
   const [currentPageIndex, setCurrentPageIndex] = useState<number>(0);
-  
+
   const [activeTool, setActiveTool] = useState<ToolType>('text');
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
+
+  // ✍️ מודאל הזנת טקסט
   const [activeInput, setActiveInput] = useState<{ x: number; y: number } | null>(null);
   const [currentText, setCurrentText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -247,13 +365,15 @@ export default function PdfEditorScreen() {
   const [pendingAction, setPendingAction] = useState<'upload' | 'preview' | 'download' | null>(null);
 
   const [showPreviewModal, setShowPreviewModal] = useState(false);
-  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+  const [previewPdfBytes, setPreviewPdfBytes] = useState<Uint8Array | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const containerHeight = pdfDimensions
     ? CONTAINER_WIDTH / pdfDimensions.aspectRatio
-    : 848;
+    : CONTAINER_WIDTH * 1.41;
+
+  const selectedElement = elements.find((el) => el.id === selectedElementId);
 
   useEffect(() => {
     let interval: any = null;
@@ -274,7 +394,7 @@ export default function PdfEditorScreen() {
     if (Platform.OS === 'web' && pdfBytes && pdfDimensions && canvasRef.current) {
       renderPdfPageToCanvas(pdfBytes, canvasRef.current, CONTAINER_WIDTH, currentPageIndex + 1);
     }
-  }, [pdfBytes, pdfDimensions, currentPageIndex]);
+  }, [pdfBytes, pdfDimensions, currentPageIndex, CONTAINER_WIDTH]);
 
   const initSignatureCanvas = (canvas: HTMLCanvasElement | null) => {
     if (!canvas) return;
@@ -345,7 +465,7 @@ export default function PdfEditorScreen() {
       y: Math.max(0, signatureClickPos.y - 30),
       width: 120,
       height: 60,
-      fontSize: 15,
+      fontSize: defaultFontSize,
       pageIndex: currentPageIndex,
     };
 
@@ -414,7 +534,7 @@ export default function PdfEditorScreen() {
       setLoading(true);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
-        copyToCacheDirectory: true,
+        copyToCacheDirectory: false,
       });
 
       if (result.canceled || !result.assets?.[0]) return;
@@ -424,8 +544,10 @@ export default function PdfEditorScreen() {
       setElements([]);
       setActiveInput(null);
       setSelectedElementId(null);
+      setZoomScale(1.0);
 
       let bytes: ArrayBuffer;
+
       if (Platform.OS === 'web') {
         const res = await fetch(uri);
         bytes = await res.arrayBuffer();
@@ -438,9 +560,7 @@ export default function PdfEditorScreen() {
 
       setPdfBytes(bytes);
 
-      const PDFDocument = await loadPDFDocument();
-      if (!PDFDocument) throw new Error('מנוע ה-PDF לא נטען');
-
+      const { PDFDocument } = await getPdfLib();
       const pdfDoc = await PDFDocument.load(bytes.slice(0));
       const pages = pdfDoc.getPages();
       setNumPages(pages.length);
@@ -455,7 +575,8 @@ export default function PdfEditorScreen() {
         aspectRatio: width / height,
       });
     } catch (err: any) {
-      Alert.alert('שגיאה', err?.message || 'אירעה שגיאה בטעינת הקובץ');
+      console.error('Upload Error:', err);
+      Alert.alert('שגיאה בטעינת הקובץ', err?.message || 'לא ניתן לקרוא את קובץ ה-PDF שנבחר.');
     } finally {
       setLoading(false);
     }
@@ -482,8 +603,7 @@ export default function PdfEditorScreen() {
       const watermarkedPdfBytes = await buildModifiedPdfBytes(true);
       if (!watermarkedPdfBytes) return;
 
-      const imageUri = await renderPdfPageToImageBase64(watermarkedPdfBytes, currentPageIndex + 1);
-      setPreviewImageUri(imageUri);
+      setPreviewPdfBytes(watermarkedPdfBytes);
       setShowPreviewModal(true);
     } catch (error: any) {
       Alert.alert('שגיאה', error?.message || 'אירעה שגיאה ביצירת תצוגה מקדימה');
@@ -558,7 +678,7 @@ export default function PdfEditorScreen() {
         setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
       } else {
         const base64Save = _uint8ArrayToBase64(pdfResultBytes);
-        const filePath = `${FileSystem.documentDirectory}DocFlow_${Date.now()}.pdf`;
+        const filePath = `${FileSystem.documentDirectory || ''}DocFlow_${Date.now()}.pdf`;
         await FileSystem.writeAsStringAsync(filePath, base64Save, {
           encoding: FileSystem.EncodingType.Base64,
         });
@@ -673,25 +793,14 @@ export default function PdfEditorScreen() {
     }
   };
 
-  const handleContainerPress = (e: any) => {
+  // 🎯 פונקציה מרכזית ללחיצה על הקנבס
+  const handleCanvasClick = (clickX: number, clickY: number) => {
     if (selectedElementId) {
       setSelectedElementId(null);
       return;
     }
 
     if (!pdfUri) return;
-
-    let clickX = 0;
-    let clickY = 0;
-
-    if (Platform.OS === 'web') {
-      const rect = e.currentTarget.getBoundingClientRect();
-      clickX = e.clientX - rect.left;
-      clickY = e.clientY - rect.top;
-    } else {
-      clickX = e.nativeEvent?.locationX || 0;
-      clickY = e.nativeEvent?.locationY || 0;
-    }
 
     if (activeTool === 'text') {
       setActiveInput({ x: clickX, y: clickY });
@@ -706,12 +815,19 @@ export default function PdfEditorScreen() {
         y: Math.max(0, clickY - 10),
         width: 120,
         height: 20,
-        fontSize: 15,
+        fontSize: defaultFontSize,
         pageIndex: currentPageIndex,
       };
 
       setElements((prev) => [...prev, newElement]);
       setSelectedElementId(newElement.id);
+    }
+  };
+
+  const handleContainerPress = (e: any) => {
+    if (Platform.OS === 'web') {
+      const rect = e.currentTarget.getBoundingClientRect();
+      handleCanvasClick(e.clientX - rect.left, e.clientY - rect.top);
     }
   };
 
@@ -726,7 +842,7 @@ export default function PdfEditorScreen() {
       y: activeInput.y,
       width: 120,
       height: 20,
-      fontSize: 15,
+      fontSize: defaultFontSize,
       pageIndex: currentPageIndex,
     };
 
@@ -740,12 +856,17 @@ export default function PdfEditorScreen() {
     setElements((prev) => prev.map((el) => (el.id === id ? { ...el, ...updates } : el)));
   };
 
+  const nudgeSelected = (dx: number, dy: number) => {
+    if (!selectedElement) return;
+    const newX = Math.max(0, Math.min(CONTAINER_WIDTH - 20, selectedElement.x + dx));
+    const newY = Math.max(0, Math.min(containerHeight - 15, selectedElement.y + dy));
+    updateElementProps(selectedElement.id, { x: newX, y: newY });
+  };
+
   const buildModifiedPdfBytes = async (isPreviewMode: boolean = false): Promise<Uint8Array | null> => {
     if (!pdfBytes || !pdfDimensions) return null;
 
-    const PDFDocument = await loadPDFDocument();
-    if (!PDFDocument) throw new Error('מנוע ה-PDF לא זמין');
-
+    const { PDFDocument, rgb } = await getPdfLib();
     const pdfDoc = await PDFDocument.load(pdfBytes.slice(0));
     const pages = pdfDoc.getPages();
 
@@ -756,24 +877,38 @@ export default function PdfEditorScreen() {
       const targetPage = pages[el.pageIndex] || pages[0];
 
       if (el.type === 'text' && el.text) {
-        const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
-        if (!base64Png) continue;
+        if (Platform.OS === 'web') {
+          const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
+          if (base64Png) {
+            const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
+            const pngImage = await pdfDoc.embedPng(imageBytes);
+            const finalImgWidth = imgW * scaleX;
+            const finalImgHeight = imgH * scaleY;
+            const finalPdfX = el.x * scaleX;
+            const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight;
 
-        const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
-        const pngImage = await pdfDoc.embedPng(imageBytes);
-
-        const finalImgWidth = imgW * scaleX;
-        const finalImgHeight = imgH * scaleY;
-
-        const finalPdfX = el.x * scaleX;
-        const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight;
-
-        targetPage.drawImage(pngImage, {
-          x: Math.max(0, finalPdfX),
-          y: finalPdfY,
-          width: finalImgWidth,
-          height: finalImgHeight,
-        });
+            targetPage.drawImage(pngImage, {
+              x: Math.max(0, finalPdfX),
+              y: finalPdfY,
+              width: finalImgWidth,
+              height: finalImgHeight,
+            });
+          }
+        } else {
+          // 🚀 הוספת טקסט חסינה במובייל
+          const finalPdfX = el.x * scaleX;
+          const finalPdfY = pdfDimensions.height - (el.y * scaleY) - (el.fontSize * scaleY);
+          try {
+            targetPage.drawText(el.text, {
+              x: Math.max(0, finalPdfX),
+              y: Math.max(0, finalPdfY),
+              size: el.fontSize * scaleY,
+              color: rgb(0, 0, 0),
+            });
+          } catch (fontErr) {
+            console.warn('Text draw warning:', fontErr);
+          }
+        }
       } else if (el.type === 'signature' && el.imageUri) {
         const imageBytes = _base64ToArrayBuffer(el.imageUri.replace(/^data:image\/png;base64,/, ''));
         const pngImage = await pdfDoc.embedPng(imageBytes);
@@ -791,41 +926,27 @@ export default function PdfEditorScreen() {
           height: finalHeight,
         });
       } else if (el.type === 'highlight' || el.type === 'redact') {
-        const { base64Png } = await renderShapeToCanvas(el.type, el.width, el.height);
-        if (!base64Png) continue;
-
-        const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
-        const pngImage = await pdfDoc.embedPng(imageBytes);
-
         const finalWidth = el.width * scaleX;
         const finalHeight = el.height * scaleY;
-
         const finalPdfX = el.x * scaleX;
         const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
 
-        targetPage.drawImage(pngImage, {
-          x: Math.max(0, finalPdfX),
-          y: finalPdfY,
-          width: finalWidth,
-          height: finalHeight,
-        });
-      }
-    }
-
-    const isPaidUser = currentUser && (currentUser.plan === 'micro_pass' || currentUser.plan === 'premium');
-    if (isPreviewMode && !isPaidUser) {
-      const { base64Png: watermarkPng, width: wW, height: wH } = await renderBrandedWatermarkCanvas();
-      if (watermarkPng) {
-        const wmBytes = _base64ToArrayBuffer(watermarkPng.replace(/^data:image\/png;base64,/, ''));
-        const wmImage = await pdfDoc.embedPng(wmBytes);
-
-        for (const page of pages) {
-          const { width: pW, height: pH } = page.getSize();
-          page.drawImage(wmImage, {
-            x: (pW - wW * 1.2) / 2,
-            y: (pH - wH * 1.2) / 2,
-            width: wW * 1.2,
-            height: wH * 1.2,
+        if (el.type === 'redact') {
+          targetPage.drawRectangle({
+            x: Math.max(0, finalPdfX),
+            y: finalPdfY,
+            width: finalWidth,
+            height: finalHeight,
+            color: rgb(0, 0, 0),
+          });
+        } else {
+          targetPage.drawRectangle({
+            x: Math.max(0, finalPdfX),
+            y: finalPdfY,
+            width: finalWidth,
+            height: finalHeight,
+            color: rgb(1, 0.92, 0.2),
+            opacity: 0.5,
           });
         }
       }
@@ -865,407 +986,658 @@ export default function PdfEditorScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      {/* 🌟 Header משודרג */}
-      <View style={styles.headerBar}>
-        <DocFlowLogo />
+    <View style={styles.mainContainer}>
+      <StatusBar backgroundColor="#0f172a" barStyle="light-content" translucent={false} />
 
-        <View style={styles.langBar}>
-          <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עב</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>EN</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>عرب</Text></TouchableOpacity>
-          <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማ</Text></TouchableOpacity>
-        </View>
+      <SafeAreaView style={styles.safeArea}>
+        {/* 🔒 ScrollView ראשי עם שליטה מלאה בנעילת גלילה */}
+        <ScrollView
+          scrollEnabled={isScrollEnabled}
+          contentContainerStyle={styles.container}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* 🌟 Header */}
+          <View style={[styles.headerBar, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+            <DocFlowLogo />
 
-        {currentUser ? (
-          <View style={styles.userInfoBadge}>
-            <Text style={styles.userEmailText}>
-              👤 {currentUser.fullName || currentUser.full_name || currentUser.email}
-            </Text>
-            <Text style={[styles.userPlanBadge, currentUser.plan !== 'free' && styles.paidPlanBadge]}>
-              {currentUser.plan.toUpperCase()}
-            </Text>
-            <TouchableOpacity onPress={() => setCurrentUser(null)}>
-              <Text style={styles.logoutText}>{t.logout}</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity
-            style={styles.authBtn}
-            onPress={() => {
-              setAuthStep(1);
-              setUserAlreadyExistsError(false);
-              setShowAuthModal(true);
-            }}
-          >
-            <Text style={styles.authBtnText}>{t.loginRegister}</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* 📢 באנר עליון למבקרים */}
-      {!currentUser && (
-        <View style={styles.topAdBannerSlot}>
-          <Text style={styles.adSlotLabel}>Sponsored</Text>
-          <Text style={styles.topAdBannerText}>⚡ {t.guestNotice}</Text>
-        </View>
-      )}
-
-      {/* 🏠 Hero Section */}
-      {!pdfUri ? (
-        <View style={styles.heroLandingCard}>
-          <Text style={styles.heroTitle}>{t.heroTitle}</Text>
-          <Text style={styles.heroSubtitle}>{t.heroSubtitle}</Text>
-
-          <TouchableOpacity style={styles.heroUploadBtn} onPress={pickDocument} disabled={loading}>
-            <Text style={styles.heroUploadBtnText}>{t.uploadPdf}</Text>
-          </TouchableOpacity>
-
-          <View style={styles.featureGrid}>
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>✍️</Text>
-              <Text style={styles.featureTitle}>{t.textTool}</Text>
-              <Text style={styles.featureDesc}>{t.textToolDesc}</Text>
+            <View style={styles.langBar}>
+              <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עב</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>EN</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>عرب</Text></TouchableOpacity>
+              <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማ</Text></TouchableOpacity>
             </View>
 
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>🖋️</Text>
-              <Text style={styles.featureTitle}>{t.signatureTool}</Text>
-              <Text style={styles.featureDesc}>{t.signatureToolDesc}</Text>
-            </View>
-
-            <View style={styles.featureItem}>
-              <Text style={styles.featureIcon}>⬛</Text>
-              <Text style={styles.featureTitle}>{t.redactTool}</Text>
-              <Text style={styles.featureDesc}>{t.redactToolDesc}</Text>
-            </View>
-          </View>
-        </View>
-      ) : (
-        /* 📝 אזור העריכה */
-        <View style={styles.editorArea}>
-          <TouchableOpacity style={styles.changeFileBtn} onPress={pickDocument} disabled={loading}>
-            <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
-          </TouchableOpacity>
-
-          {/* סרגל כלים */}
-          <View style={styles.toolbarRow}>
-            <TouchableOpacity
-              style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
-              onPress={() => setActiveTool('text')}
-            >
-              <Text style={[styles.toolBtnText, activeTool === 'text' && styles.activeToolBtnText]}>{t.textTool}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.toolBtn, activeTool === 'signature' && styles.activeToolBtn]}
-              onPress={() => setActiveTool('signature')}
-            >
-              <Text style={[styles.toolBtnText, activeTool === 'signature' && styles.activeToolBtnText]}>{t.signatureTool}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.toolBtn, activeTool === 'highlight' && styles.activeToolBtn]}
-              onPress={() => setActiveTool('highlight')}
-            >
-              <Text style={[styles.toolBtnText, activeTool === 'highlight' && styles.activeToolBtnText]}>{t.highlightTool}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.toolBtn, activeTool === 'redact' && styles.activeToolBtn]}
-              onPress={() => setActiveTool('redact')}
-            >
-              <Text style={[styles.toolBtnText, activeTool === 'redact' && styles.activeToolBtnText]}>{t.redactTool}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {renderPaginationBar()}
-
-          <View style={[styles.pdfViewerContainer, { width: CONTAINER_WIDTH, height: containerHeight }]}>
-            {Platform.OS === 'web' ? (
-              <canvas
-                ref={canvasRef}
-                style={{ width: CONTAINER_WIDTH, height: containerHeight, display: 'block' }}
-              />
+            {currentUser ? (
+              <View style={styles.userInfoBadge}>
+                <Text style={styles.userEmailText} numberOfLines={1}>
+                  👤 {currentUser.fullName || currentUser.full_name || currentUser.email}
+                </Text>
+                <Text style={[styles.userPlanBadge, currentUser.plan !== 'free' && styles.paidPlanBadge]}>
+                  {currentUser.plan.toUpperCase()}
+                </Text>
+                <TouchableOpacity onPress={() => setCurrentUser(null)}>
+                  <Text style={styles.logoutText}>{t.logout}</Text>
+                </TouchableOpacity>
+              </View>
             ) : (
-              <View style={styles.mobilePlaceholder}><Text>[תצוגת PDF]</Text></View>
+              <TouchableOpacity
+                style={styles.authBtn}
+                onPress={() => {
+                  setAuthStep(1);
+                  setUserAlreadyExistsError(false);
+                  setShowAuthModal(true);
+                }}
+              >
+                <Text style={styles.authBtnText}>{t.loginRegister}</Text>
+              </TouchableOpacity>
             )}
+          </View>
 
-            <Pressable style={StyleSheet.absoluteFillObject} onPress={handleContainerPress} />
+          {/* 📢 באנר עליון למבקרים */}
+          {!currentUser && (
+            <View style={[styles.topAdBannerSlot, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+              <Text style={styles.adSlotLabel}>Sponsored</Text>
+              <Text style={styles.topAdBannerText}>⚡ {t.guestNotice}</Text>
+            </View>
+          )}
 
-            {elements
-              .filter((el) => el.pageIndex === currentPageIndex)
-              .map((el) => (
-                <DraggableItem
-                  key={el.id}
-                  element={el}
-                  isSelected={selectedElementId === el.id}
-                  onSelect={() => setSelectedElementId(el.id)}
-                  containerBounds={{ width: CONTAINER_WIDTH, height: containerHeight }}
-                  onUpdatePos={(id, x, y) => {
-                    setElements((prev) => prev.map((item) => (item.id === id ? { ...item, x, y } : item)));
-                  }}
-                  onUpdateProps={updateElementProps}
-                  onRemove={(id) => {
-                    setElements((prev) => prev.filter((e) => e.id !== id));
-                    if (selectedElementId === id) setSelectedElementId(null);
-                  }}
-                />
-              ))}
+          {/* 🏠 Hero Section */}
+          {!pdfUri ? (
+            <View style={[styles.heroLandingCard, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+              <Text style={styles.heroTitle}>{t.heroTitle}</Text>
+              <Text style={styles.heroSubtitle}>{t.heroSubtitle}</Text>
 
-            {activeInput && (
-              <View style={[styles.inputPopup, { left: Math.min(CONTAINER_WIDTH - 200, Math.max(10, activeInput.x)), top: activeInput.y }]}>
+              <TouchableOpacity style={styles.heroUploadBtn} onPress={pickDocument} disabled={loading}>
+                <Text style={styles.heroUploadBtnText}>{t.uploadPdf}</Text>
+              </TouchableOpacity>
+
+              <View style={styles.featureGrid}>
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>✍️</Text>
+                  <Text style={styles.featureTitle}>{t.textTool}</Text>
+                  <Text style={styles.featureDesc}>{t.textToolDesc}</Text>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>🖋️</Text>
+                  <Text style={styles.featureTitle}>{t.signatureTool}</Text>
+                  <Text style={styles.featureDesc}>{t.signatureToolDesc}</Text>
+                </View>
+
+                <View style={styles.featureItem}>
+                  <Text style={styles.featureIcon}>⬛</Text>
+                  <Text style={styles.featureTitle}>{t.redactTool}</Text>
+                  <Text style={styles.featureDesc}>{t.redactToolDesc}</Text>
+                </View>
+              </View>
+            </View>
+          ) : (
+            /* 📝 אזור העריכה */
+            <View style={[styles.editorArea, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+              <TouchableOpacity style={styles.changeFileBtn} onPress={pickDocument} disabled={loading}>
+                <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
+              </TouchableOpacity>
+
+              {/* סרגל כלים רספונסיבי */}
+              <View style={styles.toolbarRow}>
+                <TouchableOpacity
+                  style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
+                  onPress={() => setActiveTool('text')}
+                >
+                  <Text style={[styles.toolBtnText, activeTool === 'text' && styles.activeToolBtnText]}>{t.textTool}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toolBtn, activeTool === 'signature' && styles.activeToolBtn]}
+                  onPress={() => setActiveTool('signature')}
+                >
+                  <Text style={[styles.toolBtnText, activeTool === 'signature' && styles.activeToolBtnText]}>{t.signatureTool}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toolBtn, activeTool === 'highlight' && styles.activeToolBtn]}
+                  onPress={() => setActiveTool('highlight')}
+                >
+                  <Text style={[styles.toolBtnText, activeTool === 'highlight' && styles.activeToolBtnText]}>{t.highlightTool}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toolBtn, activeTool === 'redact' && styles.activeToolBtn]}
+                  onPress={() => setActiveTool('redact')}
+                >
+                  <Text style={[styles.toolBtnText, activeTool === 'redact' && styles.activeToolBtnText]}>{t.redactTool}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* 🔍 סרגל בקרת זום + פונט ברירת מחדל */}
+              <View style={styles.zoomControlRow}>
+                <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomScale((prev) => Math.max(0.5, prev - 0.2))}>
+                  <Text style={styles.zoomBtnText}>🔍 -</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.zoomResetBtn} onPress={() => setZoomScale(1.0)}>
+                  <Text style={styles.zoomResetText}>{Math.round(zoomScale * 100)}%</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomScale((prev) => Math.min(2.5, prev + 0.2))}>
+                  <Text style={styles.zoomBtnText}>🔍 +</Text>
+                </TouchableOpacity>
+
+                {/* 🔤 בקרת פונט ברירת מחדל */}
+                <View style={styles.fontDefaultControl}>
+                  <TouchableOpacity onPress={() => setDefaultFontSize((prev) => Math.max(10, prev - 2))}>
+                    <Text style={styles.fontBtnText}>A-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.fontSizeLabel}>{defaultFontSize}px</Text>
+                  <TouchableOpacity onPress={() => setDefaultFontSize((prev) => Math.min(40, prev + 2))}>
+                    <Text style={styles.fontBtnText}>A+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* 🎯 סרגל ניהול ייעודי לאלמנט שנבחר (מחוץ למסמך - שומר על טקסט נקי!) */}
+              {selectedElement && (
+                <View style={styles.selectedElementControlDock}>
+                  <View style={styles.dockHeaderRow}>
+                    <Text style={styles.dockTitle} numberOfLines={1}>
+                      {selectedElement.type === 'text' ? `✍️ "${selectedElement.text}"` : '🎯 אלמנט נבחר'}
+                    </Text>
+                    <TouchableOpacity style={styles.dockCloseBtn} onPress={() => setSelectedElementId(null)}>
+                      <Text style={styles.dockCloseText}>✓ סיום</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.dockControlsRow}>
+                    {/* חיצי מיקום */}
+                    <View style={styles.dockGroup}>
+                      <Text style={styles.dockGroupLabel}>מיקום:</Text>
+                      <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(0, -3)}><Text style={styles.nudgeText}>▲</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(0, 3)}><Text style={styles.nudgeText}>▼</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(-3, 0)}><Text style={styles.nudgeText}>◄</Text></TouchableOpacity>
+                      <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(3, 0)}><Text style={styles.nudgeText}>►</Text></TouchableOpacity>
+                    </View>
+
+                    {/* שינוי פונט או רוחב */}
+                    {selectedElement.type === 'text' ? (
+                      <View style={styles.dockGroup}>
+                        <Text style={styles.dockGroupLabel}>פונט:</Text>
+                        <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { fontSize: Math.max(10, selectedElement.fontSize - 2) })}>
+                          <Text style={styles.nudgeText}>A-</Text>
+                        </TouchableOpacity>
+                        <Text style={styles.fontSizeBadge}>{selectedElement.fontSize}px</Text>
+                        <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { fontSize: Math.min(40, selectedElement.fontSize + 2) })}>
+                          <Text style={styles.nudgeText}>A+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    ) : (
+                      <View style={styles.dockGroup}>
+                        <Text style={styles.dockGroupLabel}>רוחב:</Text>
+                        <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { width: Math.max(20, selectedElement.width - 15) })}>
+                          <Text style={styles.nudgeText}>צר-</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { width: Math.min(400, selectedElement.width + 15) })}>
+                          <Text style={styles.nudgeText}>רחב+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    )}
+
+                    {/* מחיקה */}
+                    <TouchableOpacity
+                      style={styles.dockDeleteBtn}
+                      onPress={() => {
+                        setElements((prev) => prev.filter((e) => e.id !== selectedElement.id));
+                        setSelectedElementId(null);
+                      }}
+                    >
+                      <Text style={styles.dockDeleteText}>🗑️ מחק</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+
+              {renderPaginationBar()}
+
+              {/* 📄 תצוגת הקובץ בגלילה אופקית לתמיכה בזום-אין (ננעלת בזמן גרירה) */}
+              <ScrollView
+                horizontal
+                scrollEnabled={isScrollEnabled}
+                showsHorizontalScrollIndicator={true}
+                contentContainerStyle={{ alignItems: 'center' }}
+                style={{ width: '100%' }}
+              >
+                <View style={[styles.pdfViewerContainer, { width: CONTAINER_WIDTH, height: containerHeight }]}>
+                  {Platform.OS === 'web' ? (
+                    <canvas
+                      ref={canvasRef}
+                      style={{ width: CONTAINER_WIDTH, height: containerHeight, display: 'block' }}
+                    />
+                  ) : (
+                    pdfBytes && (
+                      <WebView
+                        originWhitelist={['*']}
+                        onMessage={(event) => {
+                          try {
+                            const data = JSON.parse(event.nativeEvent.data);
+                            if (data.type === 'click') {
+                              handleCanvasClick(data.x, data.y);
+                            }
+                          } catch (e) {
+                            console.error('WebView message error:', e);
+                          }
+                        }}
+                        source={{
+                          html: `
+                            <!DOCTYPE html>
+                            <html>
+                              <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+                                <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                                <style>
+                                  * { box-sizing: border-box; }
+                                  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+                                  #canvas-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+                                  canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+                                </style>
+                              </head>
+                              <body>
+                                <div id="canvas-container">
+                                  <canvas id="pdf-canvas"></canvas>
+                                </div>
+                                <script>
+                                  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                                  const base64Data = "${_uint8ArrayToBase64(new Uint8Array(pdfBytes))}";
+                                  const raw = window.atob(base64Data);
+                                  const rawLength = raw.length;
+                                  const array = new Uint8Array(new ArrayBuffer(rawLength));
+                                  for(let i = 0; i < rawLength; i++) {
+                                    array[i] = raw.charCodeAt(i);
+                                  }
+
+                                  pdfjsLib.getDocument({ data: array }).promise.then(pdf => {
+                                    pdf.getPage(${currentPageIndex + 1}).then(page => {
+                                      const canvas = document.getElementById('pdf-canvas');
+                                      const context = canvas.getContext('2d');
+                                      const viewport = page.getViewport({ scale: 1.0 });
+
+                                      const scale = (${CONTAINER_WIDTH} / viewport.width);
+                                      const scaledViewport = page.getViewport({ scale: scale * 2.0 });
+
+                                      canvas.width = scaledViewport.width;
+                                      canvas.height = scaledViewport.height;
+                                      page.render({ canvasContext: context, viewport: scaledViewport });
+                                    });
+                                  });
+
+                                  document.getElementById('canvas-container').addEventListener('click', function(e) {
+                                    const rect = this.getBoundingClientRect();
+                                    const x = e.clientX - rect.left;
+                                    const y = e.clientY - rect.top;
+                                    if (window.ReactNativeWebView) {
+                                      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'click', x: x, y: y }));
+                                    }
+                                  });
+                                </script>
+                              </body>
+                            </html>
+                          `
+                        }}
+                        style={{ width: CONTAINER_WIDTH, height: containerHeight, backgroundColor: 'transparent' }}
+                        scrollEnabled={false}
+                      />
+                    )
+                  )}
+
+                  {/* שכבת לחיצה ל-Web בלבד */}
+                  {Platform.OS === 'web' && (
+                    <Pressable style={StyleSheet.absoluteFillObject} onPress={handleContainerPress} />
+                  )}
+
+                  {/* 🎨 אלמנטים נגררים נקיים בלבד (מסגרת עדינה ללא הסתרות!) */}
+                  {elements
+                    .filter((el) => el.pageIndex === currentPageIndex)
+                    .map((el) => (
+                      <DraggableItem
+                        key={el.id}
+                        element={el}
+                        isSelected={selectedElementId === el.id}
+                        onSelect={() => setSelectedElementId(el.id)}
+                        containerBounds={{ width: CONTAINER_WIDTH, height: containerHeight }}
+                        onUpdatePos={(id, x, y) => {
+                          setElements((prev) => prev.map((item) => (item.id === id ? { ...item, x, y } : item)));
+                        }}
+                        onDragStart={() => setIsScrollEnabled(false)}
+                        onDragEnd={() => setIsScrollEnabled(true)}
+                      />
+                    ))}
+                </View>
+              </ScrollView>
+
+              <View style={{ marginTop: 12, width: '100%' }}>
+                {renderPaginationBar()}
+              </View>
+
+              <View style={styles.actionButtonsRow}>
+                <TouchableOpacity style={[styles.actionBtn, styles.previewBtn]} onPress={handlePreviewPdf} disabled={loading}>
+                  <Text style={styles.buttonText}>{t.preview}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.actionBtn, styles.downloadBtn]} onPress={triggerDownloadProcess} disabled={loading}>
+                  <Text style={styles.buttonText}>{t.download}</Text>
+                </TouchableOpacity>
+              </View>
+
+              {loading && <ActivityIndicator size="large" color="#0052D4" style={{ marginTop: 15 }} />}
+            </View>
+          )}
+
+          {/* ✍️ Modal דיאלוג מרכזי להזנת טקסט למסמך */}
+          <Modal visible={!!activeInput} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalCard, { maxWidth: 400 }]}>
+                <Text style={styles.modalTitle}>✍️ הוספת טקסט למסמך</Text>
+                <Text style={styles.modalSubtitle}>הקלד את הטקסט שברצונך למקם במסמך:</Text>
+
                 <TextInput
-                  style={styles.popupInput}
-                  placeholder="טקסט / Text / ጽሑፍ / نص..."
+                  style={styles.promptTextInput}
+                  placeholder="הקלד כאן..."
                   value={currentText}
                   onChangeText={setCurrentText}
+                  multiline
                   autoFocus
                 />
-                <TouchableOpacity style={styles.addBtn} onPress={handleAddTextElement}>
-                  <Text style={{ color: '#fff', fontWeight: 'bold' }}>הוסף</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.addBtn, { backgroundColor: '#64748b' }]} onPress={() => setActiveInput(null)}>
-                  <Text style={{ color: '#fff' }}>✕</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
 
-          <View style={{ marginTop: 12 }}>
-            {renderPaginationBar()}
-          </View>
-
-          <View style={styles.actionButtonsRow}>
-            <TouchableOpacity style={[styles.actionBtn, styles.previewBtn]} onPress={handlePreviewPdf} disabled={loading}>
-              <Text style={styles.buttonText}>{t.preview}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.actionBtn, styles.downloadBtn]} onPress={triggerDownloadProcess} disabled={loading}>
-              <Text style={styles.buttonText}>{t.download}</Text>
-            </TouchableOpacity>
-          </View>
-
-          {loading && <ActivityIndicator size="large" color="#0052D4" style={{ marginTop: 15 }} />}
-        </View>
-      )}
-
-      {/* 🖋️ Modal פד חתימה */}
-      <Modal visible={showSignatureModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxWidth: 450 }]}>
-            <Text style={styles.modalTitle}>{t.signModalTitle}</Text>
-
-            {Platform.OS === 'web' ? (
-              <canvas
-                ref={initSignatureCanvas}
-                width={380}
-                height={180}
-                style={styles.signatureCanvasBox}
-              />
-            ) : (
-              <View style={[styles.signatureCanvasBox, { justifyContent: 'center', alignItems: 'center' }]}>
-                <Text>[פד חתימה במגע למובייל]</Text>
-              </View>
-            )}
-
-            <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#cbd5e1', flex: 1 }]} onPress={clearSignatureCanvas}>
-                <Text style={{ color: '#1e293b', fontWeight: 'bold', textAlign: 'center' }}>{t.clear}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a', flex: 2 }]} onPress={saveSignatureAndPlace}>
-                <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>{t.confirmSignature}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowSignatureModal(false)}>
-              <Text style={styles.modalCancelBtnText}>{t.close}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 📺 Modal פרסומת */}
-      <Modal visible={showAdModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{adTitle}</Text>
-            <Text style={styles.modalSubtitle}>{adMessage}</Text>
-
-            <View style={styles.adBannerBox}>
-              <Text style={styles.adPlaceholderText}>[ שטח פרסומת AdSense / Rewarded Ad ]</Text>
-            </View>
-
-            {!isAdFinished ? (
-              <View style={styles.timerBox}>
-                <ActivityIndicator size="small" color="#0052D4" />
-                <Text style={styles.timerText}>זמין בעוד <Text style={styles.timerCount}>{adTimer}</Text> שניות...</Text>
-              </View>
-            ) : (
-              <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAdFinishedAction}>
-                <Text style={styles.modalDownloadBtnText}>✅ המשך כעת</Text>
-              </TouchableOpacity>
-            )}
-
-            <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAdModal(false)}>
-              <Text style={styles.modalCancelBtnText}>ביטול</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 🔐 Modal הרשמה ומסלולים */}
-      <Modal visible={showAuthModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxWidth: 540 }]}>
-            <Text style={styles.modalTitle}>
-              {authMode === 'register' ? `🎯 הרשמה ל-DocFlow` : '🔑 התחברות'}
-            </Text>
-
-            {userAlreadyExistsError && (
-              <View style={styles.userExistsWarningBox}>
-                <Text style={styles.warningTitle}>⚠️ המייל כבר רשום במערכת!</Text>
-                <Text style={styles.warningText}>כתובת המייל "{authEmail}" כבר קיימת ב-DocFlow.</Text>
-                <TouchableOpacity
-                  style={styles.switchLoginBtn}
-                  onPress={() => {
-                    setUserAlreadyExistsError(false);
-                    setAuthStep(1);
-                    setAuthMode('login');
-                  }}
-                >
-                  <Text style={styles.switchLoginBtnText}>🔑 לחץ כאן למעבר להתחברות</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            {authStep === 1 ? (
-              <>
-                <TextInput
-                  style={styles.authInput}
-                  placeholder="כתובת מייל"
-                  value={authEmail}
-                  onChangeText={(text) => {
-                    setAuthEmail(text);
-                    setUserAlreadyExistsError(false);
-                  }}
-                  keyboardType="email-address"
-                />
-                <TextInput
-                  style={styles.authInput}
-                  placeholder="סיסמה"
-                  secureTextEntry
-                  value={authPassword}
-                  onChangeText={setAuthPassword}
-                />
-                <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAuthStep1}>
-                  <Text style={styles.modalDownloadBtnText}>
-                    {authMode === 'register' ? 'המשך לבחירת שם ומסלול ➔' : 'התחבר'}
-                  </Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <>
-                <TextInput
-                  style={styles.authInput}
-                  placeholder="שם משתמש"
-                  value={authFullName}
-                  onChangeText={setAuthFullName}
-                />
-
-                <Text style={styles.sectionTitle}>{t.selectPlanTitle}</Text>
-                <View style={styles.plansContainer}>
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
                   <TouchableOpacity
-                    style={[styles.planCard, selectedPlan === 'free' && styles.selectedPlanCard]}
-                    onPress={() => setSelectedPlan('free')}
+                    style={[styles.actionBtn, { backgroundColor: '#cbd5e1', flex: 1 }]}
+                    onPress={() => {
+                      setActiveInput(null);
+                      setCurrentText('');
+                    }}
                   >
-                    <Text style={styles.planName}>{t.basicPlan}</Text>
-                    <Text style={styles.planPrice}>חינם</Text>
-                    <Text style={styles.planDesc}>{t.basicPlanDesc}</Text>
+                    <Text style={{ color: '#1e293b', fontWeight: 'bold', textAlign: 'center' }}>{t.close}</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={[styles.planCard, selectedPlan === 'micro_pass' && styles.selectedPlanCard]}
-                    onPress={() => setSelectedPlan('micro_pass')}
+                    style={[styles.actionBtn, { backgroundColor: '#0052D4', flex: 2 }]}
+                    onPress={handleAddTextElement}
                   >
-                    <Text style={styles.planName}>{t.passPlan}</Text>
-                    <Text style={styles.planPrice}>₪9.90 חד-פעמי</Text>
-                    <Text style={styles.planDesc}>{t.passPlanDesc}</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>הוסף למסמך ✅</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* 🖋️ Modal פד חתימה */}
+          <Modal visible={showSignatureModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalCard, { maxWidth: 450 }]}>
+                <Text style={styles.modalTitle}>{t.signModalTitle}</Text>
+
+                {Platform.OS === 'web' ? (
+                  <canvas
+                    ref={initSignatureCanvas}
+                    width={320}
+                    height={160}
+                    style={styles.signatureCanvasBox}
+                  />
+                ) : (
+                  <View style={[styles.signatureCanvasBox, { justifyContent: 'center', alignItems: 'center' }]}>
+                    <Text>[פד חתימה במגע למובייל]</Text>
+                  </View>
+                )}
+
+                <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#cbd5e1', flex: 1 }]} onPress={clearSignatureCanvas}>
+                    <Text style={{ color: '#1e293b', fontWeight: 'bold', textAlign: 'center' }}>{t.clear}</Text>
                   </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[styles.planCard, selectedPlan === 'premium' && styles.selectedPlanCard]}
-                    onPress={() => setSelectedPlan('premium')}
-                  >
-                    <Text style={styles.planName}>{t.premiumPlan}</Text>
-                    <Text style={styles.planPrice}>₪49/חודש</Text>
-                    <Text style={styles.planDesc}>{t.premiumPlanDesc}</Text>
+                  <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#16a34a', flex: 2 }]} onPress={saveSignatureAndPlace}>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>{t.confirmSignature}</Text>
                   </TouchableOpacity>
                 </View>
 
-                <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleFinalRegister}>
-                  <Text style={styles.modalDownloadBtnText}>סיום הרשמה והתחל ✅</Text>
+                <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowSignatureModal(false)}>
+                  <Text style={styles.modalCancelBtnText}>{t.close}</Text>
                 </TouchableOpacity>
-              </>
-            )}
-
-            <TouchableOpacity
-              onPress={() => {
-                setUserAlreadyExistsError(false);
-                setAuthStep(1);
-                setAuthMode(authMode === 'register' ? 'login' : 'register');
-              }}
-              style={{ marginTop: 12 }}
-            >
-              <Text style={{ color: '#0052D4', fontWeight: 'bold' }}>
-                {authMode === 'register' ? 'כבר נרשמת? התחבר כאן' : 'אין לך חשבון? הרשם כאן'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowAuthModal(false)}>
-              <Text style={styles.modalCancelBtnText}>{t.close}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 👁️ Modal תצוגה מקדימה */}
-      <Modal visible={showPreviewModal} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxWidth: 640 }]}>
-            <Text style={styles.modalTitle}>{t.preview}</Text>
-            {previewImageUri && (
-              <View style={styles.previewImageContainer}>
-                <Image source={{ uri: previewImageUri }} style={{ width: '100%', height: 420 }} resizeMode="contain" />
               </View>
-            )}
-            <TouchableOpacity style={[styles.modalDownloadBtn, { marginTop: 15 }]} onPress={() => setShowPreviewModal(false)}>
-              <Text style={styles.modalDownloadBtnText}>{t.close}</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </ScrollView>
+            </View>
+          </Modal>
+
+          {/* 📺 Modal פרסומת */}
+          <Modal visible={showAdModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalCard}>
+                <Text style={styles.modalTitle}>{adTitle}</Text>
+                <Text style={styles.modalSubtitle}>{adMessage}</Text>
+
+                <View style={styles.adBannerBox}>
+                  <Text style={styles.adPlaceholderText}>[ שטח פרסומת AdSense / Rewarded Ad ]</Text>
+                </View>
+
+                {!isAdFinished ? (
+                  <View style={styles.timerBox}>
+                    <ActivityIndicator size="small" color="#0052D4" />
+                    <Text style={styles.timerText}>זמין בעוד <Text style={styles.timerCount}>{adTimer}</Text> שניות...</Text>
+                  </View>
+                ) : (
+                  <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAdFinishedAction}>
+                    <Text style={styles.modalDownloadBtnText}>✅ המשך כעת</Text>
+                  </TouchableOpacity>
+                )}
+
+                <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowAdModal(false)}>
+                  <Text style={styles.modalCancelBtnText}>{t.close}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* 🔐 Modal הרשמה */}
+          <Modal visible={showAuthModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }} style={{ width: '100%' }}>
+                <View style={[styles.modalCard, { maxWidth: 540 }]}>
+                  <Text style={styles.modalTitle}>
+                    {authMode === 'register' ? `🎯 ${t.register}` : `🔑 ${t.login}`}
+                  </Text>
+
+                  {userAlreadyExistsError && (
+                    <View style={styles.userExistsWarningBox}>
+                      <Text style={styles.warningTitle}>⚠️ המייל כבר רשום במערכת!</Text>
+                      <Text style={styles.warningText}>כתובת המייל "{authEmail}" כבר קיימת ב-DocFlow.</Text>
+                      <TouchableOpacity
+                        style={styles.switchLoginBtn}
+                        onPress={() => {
+                          setUserAlreadyExistsError(false);
+                          setAuthStep(1);
+                          setAuthMode('login');
+                        }}
+                      >
+                        <Text style={styles.switchLoginBtnText}>🔑 לחץ כאן למעבר להתחברות</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {authStep === 1 ? (
+                    <>
+                      <TextInput
+                        style={styles.authInput}
+                        placeholder={t.emailPlaceholder}
+                        value={authEmail}
+                        onChangeText={(text) => {
+                          setAuthEmail(text);
+                          setUserAlreadyExistsError(false);
+                        }}
+                        keyboardType="email-address"
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={styles.authInput}
+                        placeholder={t.passwordPlaceholder}
+                        secureTextEntry
+                        value={authPassword}
+                        onChangeText={setAuthPassword}
+                      />
+                      <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAuthStep1}>
+                        <Text style={styles.modalDownloadBtnText}>
+                          {authMode === 'register' ? t.continueToPlan : t.login}
+                        </Text>
+                      </TouchableOpacity>
+                    </>
+                  ) : (
+                    <>
+                      <TextInput
+                        style={styles.authInput}
+                        placeholder={t.fullNamePlaceholder}
+                        value={authFullName}
+                        onChangeText={setAuthFullName}
+                      />
+
+                      <Text style={styles.sectionTitle}>{t.selectPlanTitle}</Text>
+                      <View style={styles.plansContainer}>
+                        <TouchableOpacity
+                          style={[styles.planCard, selectedPlan === 'free' && styles.selectedPlanCard]}
+                          onPress={() => setSelectedPlan('free')}
+                        >
+                          <Text style={styles.planName}>{t.basicPlan}</Text>
+                          <Text style={styles.planPrice}>חינם</Text>
+                          <Text style={styles.planDesc}>{t.basicPlanDesc}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.planCard, selectedPlan === 'micro_pass' && styles.selectedPlanCard]}
+                          onPress={() => setSelectedPlan('micro_pass')}
+                        >
+                          <Text style={styles.planName}>{t.passPlan}</Text>
+                          <Text style={styles.planPrice}>₪9.90</Text>
+                          <Text style={styles.planDesc}>{t.passPlanDesc}</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.planCard, selectedPlan === 'premium' && styles.selectedPlanCard]}
+                          onPress={() => setSelectedPlan('premium')}
+                        >
+                          <Text style={styles.planName}>{t.premiumPlan}</Text>
+                          <Text style={styles.planPrice}>₪49/מועד</Text>
+                          <Text style={styles.planDesc}>{t.premiumPlanDesc}</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleFinalRegister}>
+                        <Text style={styles.modalDownloadBtnText}>{t.finishRegister}</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+
+                  <TouchableOpacity
+                    onPress={() => {
+                      setUserAlreadyExistsError(false);
+                      setAuthStep(1);
+                      setAuthMode(authMode === 'register' ? 'login' : 'register');
+                    }}
+                    style={{ marginTop: 14 }}
+                  >
+                    <Text style={{ color: '#0052D4', fontWeight: 'bold', fontSize: 13 }}>
+                      {authMode === 'register' ? t.alreadyRegistered : t.noAccountYet}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowAuthModal(false)}>
+                    <Text style={styles.modalCancelBtnText}>{t.close}</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+            </View>
+          </Modal>
+
+          {/* 👁️ Modal תצוגה מקדימה */}
+          <Modal visible={showPreviewModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalCard, { maxWidth: 640 }]}>
+                <Text style={styles.modalTitle}>{t.preview}</Text>
+                {previewPdfBytes && (
+                  <View style={[styles.previewImageContainer, { height: 380 }]}>
+                    {Platform.OS === 'web' ? (
+                      <iframe
+                        src={`data:application/pdf;base64,${_uint8ArrayToBase64(previewPdfBytes)}`}
+                        style={{ width: '100%', height: '100%', border: 'none' }}
+                      />
+                    ) : (
+                      <WebView
+                        originWhitelist={['*']}
+                        source={{
+                          html: `
+                            <!DOCTYPE html>
+                            <html>
+                              <head>
+                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+                                <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                                <style>
+                                  * { box-sizing: border-box; }
+                                  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; display: flex; justify-content: center; align-items: center; }
+                                  canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+                                </style>
+                              </head>
+                              <body>
+                                <canvas id="preview-canvas"></canvas>
+                                <script>
+                                  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                                  const base64Data = "${_uint8ArrayToBase64(previewPdfBytes)}";
+                                  const raw = window.atob(base64Data);
+                                  const rawLength = raw.length;
+                                  const array = new Uint8Array(new ArrayBuffer(rawLength));
+                                  for(let i = 0; i < rawLength; i++) {
+                                    array[i] = raw.charCodeAt(i);
+                                  }
+
+                                  pdfjsLib.getDocument({ data: array }).promise.then(pdf => {
+                                    pdf.getPage(${currentPageIndex + 1}).then(page => {
+                                      const canvas = document.getElementById('preview-canvas');
+                                      const context = canvas.getContext('2d');
+                                      const viewport = page.getViewport({ scale: 1.5 });
+                                      canvas.width = viewport.width;
+                                      canvas.height = viewport.height;
+                                      page.render({ canvasContext: context, viewport: viewport });
+                                    });
+                                  });
+                                </script>
+                              </body>
+                            </html>
+                          `
+                        }}
+                        style={{ width: '100%', height: '100%' }}
+                      />
+                    )}
+                  </View>
+                )}
+                <TouchableOpacity style={[styles.modalDownloadBtn, { marginTop: 15 }]} onPress={() => setShowPreviewModal(false)}>
+                  <Text style={styles.modalDownloadBtnText}>{t.close}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        </ScrollView>
+      </SafeAreaView>
+    </View>
   );
 }
 
+// 🔷 רכיב נגרר נקי - מציג מסגרת עדינה בלבד בזמן בחירה ללא הסתרת טקסט
 function DraggableItem({
   element,
   isSelected,
   onSelect,
   containerBounds,
   onUpdatePos,
-  onUpdateProps,
-  onRemove,
+  onDragStart,
+  onDragEnd,
 }: {
   element: EditorElement;
   isSelected: boolean;
   onSelect: () => void;
   containerBounds: { width: number; height: number };
   onUpdatePos: (id: string, x: number, y: number) => void;
-  onUpdateProps: (id: string, updates: Partial<EditorElement>) => void;
-  onRemove: (id: string) => void;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
 }) {
   const startPos = useRef({ x: element.x, y: element.y });
 
@@ -1276,11 +1648,18 @@ function DraggableItem({
       onPanResponderGrant: () => {
         startPos.current = { x: element.x, y: element.y };
         onSelect();
+        onDragStart?.();
       },
       onPanResponderMove: (_, gestureState) => {
         const newX = Math.max(0, Math.min(containerBounds.width - 20, startPos.current.x + gestureState.dx));
         const newY = Math.max(0, Math.min(containerBounds.height - 15, startPos.current.y + gestureState.dy));
         onUpdatePos(element.id, newX, newY);
+      },
+      onPanResponderRelease: () => {
+        onDragEnd?.();
+      },
+      onPanResponderTerminate: () => {
+        onDragEnd?.();
       },
     })
   ).current;
@@ -1294,56 +1673,13 @@ function DraggableItem({
           left: element.x,
           top: element.y,
         },
+        isSelected && styles.selectedItemOutline, // 👈 מסגרת מקווקוות עדינה ושקופה
       ]}
     >
-      {isSelected && (
-        <View style={styles.floatingActionBar}>
-          {element.type === 'text' ? (
-            <>
-              <TouchableOpacity
-                style={styles.actionBadgeBtn}
-                onPress={() => onUpdateProps(element.id, { fontSize: Math.max(10, element.fontSize - 2) })}
-              >
-                <Text style={styles.actionBadgeText}>A-</Text>
-              </TouchableOpacity>
-              <Text style={styles.fontSizeText}>{element.fontSize}px</Text>
-              <TouchableOpacity
-                style={styles.actionBadgeBtn}
-                onPress={() => onUpdateProps(element.id, { fontSize: Math.min(40, element.fontSize + 2) })}
-              >
-                <Text style={styles.actionBadgeText}>A+</Text>
-              </TouchableOpacity>
-            </>
-          ) : (
-            <>
-              <TouchableOpacity
-                style={styles.actionBadgeBtn}
-                onPress={() => onUpdateProps(element.id, { width: Math.max(20, element.width - 15) })}
-              >
-                <Text style={styles.actionBadgeText}>צר-</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBadgeBtn}
-                onPress={() => onUpdateProps(element.id, { width: Math.min(400, element.width + 15) })}
-              >
-                <Text style={styles.actionBadgeText}>רחב+</Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          <TouchableOpacity style={[styles.actionBadgeBtn, styles.deleteBadgeBtn]} onPress={() => onRemove(element.id)}>
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: 'bold' }}>✕</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       {element.type === 'text' && (
-        <>
-          <Text style={[styles.overlayText, { fontSize: element.fontSize, lineHeight: element.fontSize * 1.2 }]}>
-            {element.text}
-          </Text>
-          {isSelected && <View style={styles.baselineGuide} />}
-        </>
+        <Text style={[styles.overlayText, { fontSize: element.fontSize, lineHeight: element.fontSize * 1.2 }]}>
+          {element.text}
+        </Text>
       )}
 
       {element.type === 'signature' && element.imageUri && (
@@ -1359,7 +1695,6 @@ function DraggableItem({
           style={[
             styles.highlightBox,
             { width: element.width, height: element.height },
-            isSelected && styles.selectedBoxBorder,
           ]}
         />
       )}
@@ -1369,7 +1704,6 @@ function DraggableItem({
           style={[
             styles.redactBox,
             { width: element.width, height: element.height },
-            isSelected && styles.selectedBoxBorder,
           ]}
         />
       )}
@@ -1419,65 +1753,6 @@ async function renderPdfPageToCanvas(
   }
 }
 
-async function renderPdfPageToImageBase64(arrayBuffer: ArrayBuffer, pageNumber: number = 1): Promise<string> {
-  if (typeof window === 'undefined') return '';
-  const canvas = document.createElement('canvas');
-  let pdfjsLib = (window as any).pdfjsLib;
-  if (!pdfjsLib) return '';
-
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
-  const page = await pdf.getPage(pageNumber);
-
-  const viewport = page.getViewport({ scale: 1.5 });
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return '';
-
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  return canvas.toDataURL('image/png');
-}
-
-async function renderBrandedWatermarkCanvas() {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return { base64Png: '', width: 0, height: 0 };
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return { base64Png: '', width: 0, height: 0 };
-
-  const width = 500;
-  const height = 220;
-  canvas.width = width;
-  canvas.height = height;
-
-  ctx.translate(width / 2, height / 2);
-  ctx.rotate((-22 * Math.PI) / 180);
-
-  ctx.save();
-  ctx.globalAlpha = 0.22;
-  ctx.fillStyle = '#0052D4';
-  ctx.beginPath();
-  ctx.roundRect(-30, -85, 60, 75, 8);
-  ctx.fill();
-
-  ctx.fillStyle = '#FF512F';
-  ctx.beginPath();
-  ctx.arc(15, -20, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.restore();
-
-  ctx.textAlign = 'center';
-  ctx.font = 'bold 36px Arial, sans-serif';
-  ctx.fillStyle = 'rgba(10, 37, 64, 0.30)';
-  ctx.fillText('DocFlow', 0, 20);
-
-  ctx.font = 'bold 20px Arial, sans-serif';
-  ctx.fillStyle = 'rgba(217, 119, 6, 0.40)';
-  ctx.fillText('PREVIEW ONLY • דוגמא ללא תוקף', 0, 50);
-
-  return { base64Png: canvas.toDataURL('image/png'), width, height };
-}
-
 async function renderCrispTextToCanvas(text: string, fontSize: number = 15) {
   if (Platform.OS !== 'web' || typeof window === 'undefined') return { base64Png: '', width: 0, height: 0 };
   const canvas = document.createElement('canvas');
@@ -1504,125 +1779,178 @@ async function renderCrispTextToCanvas(text: string, fontSize: number = 15) {
   return { base64Png: canvas.toDataURL('image/png'), width: displayWidth, height: displayHeight };
 }
 
-async function renderShapeToCanvas(type: 'highlight' | 'redact', width: number, height: number) {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return { base64Png: '' };
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return { base64Png: '' };
+// function _base64ToArrayBuffer(base64: string) {
+//   const binaryString = atob(base64);
+//   const bytes = new Uint8Array(binaryString.length);
+//   for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+//   return bytes.buffer;
+// }
 
-  const dpiScale = 2;
-  canvas.width = width * dpiScale;
-  canvas.height = height * dpiScale;
-  ctx.scale(dpiScale, dpiScale);
-
-  if (type === 'redact') {
-    ctx.fillStyle = '#000000';
-    ctx.fillRect(0, 0, width, height);
-  } else {
-    ctx.fillStyle = 'rgba(255, 235, 50, 0.5)';
-    ctx.fillRect(0, 0, width, height);
-  }
-
-  return { base64Png: canvas.toDataURL('image/png') };
-}
-
-function _base64ToArrayBuffer(base64: string) {
-  const binaryString = atob(base64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-  return bytes.buffer;
-}
-
-function _uint8ArrayToBase64(uint8: Uint8Array): string {
-  let binary = '';
-  const len = uint8.byteLength;
-  for (let i = 0; i < len; i++) {
-    binary += String.fromCharCode(uint8[i]);
-  }
-  return btoa(binary);
-}
+// function _uint8ArrayToBase64(uint8: Uint8Array): string {
+//   let binary = '';
+//   const len = uint8.byteLength;
+//   for (let i = 0; i < len; i++) {
+//     binary += String.fromCharCode(uint8[i]);
+//   }
+//   return btoa(binary);
+// }
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingTop: 20, backgroundColor: '#f8fafc', alignItems: 'center', minHeight: '100%' },
-  
-  headerBar: { width: '100%', maxWidth: CONTAINER_WIDTH, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, backgroundColor: '#ffffff', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
-  logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  logoBadgeIcon: { backgroundColor: '#0052D4', paddingVertical: 4, paddingHorizontal: 7, borderRadius: 6 },
-  logoBadgeText: { color: '#ffffff', fontWeight: '900', fontSize: 11 },
-  logoText: { fontSize: 20, fontWeight: '900', color: '#0f172a', letterSpacing: -0.5 },
+  mainContainer: {
+    flex: 1,
+    backgroundColor: '#0f172a',
+  },
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+  },
+  container: {
+    padding: 12,
+    paddingTop: 8,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+    minHeight: '100%',
+  },
+
+  headerBar: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+    backgroundColor: '#ffffff',
+    padding: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  logoContainer: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  logoBadgeIcon: { backgroundColor: '#0052D4', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6 },
+  logoBadgeText: { color: '#ffffff', fontWeight: '900', fontSize: 10 },
+  logoText: { fontSize: 18, fontWeight: '900', color: '#0f172a', letterSpacing: -0.5 },
   logoHighlight: { color: '#0052D4' },
 
   langBar: { flexDirection: 'row', gap: 2, backgroundColor: '#f1f5f9', borderRadius: 8, padding: 2 },
-  langBtn: { paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },
+  langBtn: { paddingVertical: 4, paddingHorizontal: 6, borderRadius: 6 },
   activeLangBtn: { backgroundColor: '#0052D4' },
-  langText: { fontSize: 11, fontWeight: 'bold', color: '#64748b' },
+  langText: { fontSize: 10, fontWeight: 'bold', color: '#64748b' },
   activeLangText: { color: '#ffffff' },
 
-  authBtn: { backgroundColor: '#0052D4', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8 },
-  authBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 12 },
-  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  userEmailText: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
-  userPlanBadge: { backgroundColor: '#64748b', color: '#fff', fontSize: 9, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 },
+  authBtn: { backgroundColor: '#0052D4', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
+  authBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 11 },
+  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  userEmailText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b', maxWidth: 100 },
+  userPlanBadge: { backgroundColor: '#64748b', color: '#fff', fontSize: 8, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 4, borderRadius: 4 },
   paidPlanBadge: { backgroundColor: '#16a34a' },
-  logoutText: { color: '#dc2626', fontSize: 11, fontWeight: 'bold', marginRight: 2 },
+  logoutText: { color: '#dc2626', fontSize: 10, fontWeight: 'bold' },
 
-  topAdBannerSlot: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 10, marginBottom: 14, alignItems: 'center' },
+  topAdBannerSlot: { width: '100%', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 8, marginBottom: 12, alignItems: 'center' },
   adSlotLabel: { fontSize: 9, fontWeight: 'bold', color: '#3b82f6', textTransform: 'uppercase', marginBottom: 2, alignSelf: 'flex-start' },
-  topAdBannerText: { fontSize: 12, color: '#1e40af', fontWeight: '600', textAlign: 'center' },
+  topAdBannerText: { fontSize: 11, color: '#1e40af', fontWeight: '600', textAlign: 'center' },
 
-  heroLandingCard: { width: '100%', maxWidth: CONTAINER_WIDTH, backgroundColor: '#ffffff', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-  heroTitle: { fontSize: 22, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 8 },
-  heroSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 20, lineHeight: 18 },
-  heroUploadBtn: { backgroundColor: '#0052D4', paddingVertical: 14, paddingHorizontal: 28, borderRadius: 10, width: '100%', alignItems: 'center', marginBottom: 24, elevation: 3 },
-  heroUploadBtnText: { color: '#ffffff', fontSize: 16, fontWeight: 'bold' },
-  
-  featureGrid: { flexDirection: 'row', gap: 8, width: '100%' },
-  featureItem: { flex: 1, backgroundColor: '#f8fafc', borderRadius: 10, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
-  featureIcon: { fontSize: 22, marginBottom: 4 },
-  featureTitle: { fontSize: 12, fontWeight: 'bold', color: '#1e293b', marginBottom: 2, textAlign: 'center' },
-  featureDesc: { fontSize: 10, color: '#64748b', textAlign: 'center' },
+  heroLandingCard: { width: '100%', backgroundColor: '#ffffff', borderRadius: 16, padding: 18, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0', elevation: 2 },
+  heroTitle: { fontSize: 18, fontWeight: '800', color: '#0f172a', textAlign: 'center', marginBottom: 6 },
+  heroSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 16, lineHeight: 16 },
+  heroUploadBtn: { backgroundColor: '#0052D4', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 10, width: '100%', alignItems: 'center', marginBottom: 18, elevation: 2 },
+  heroUploadBtnText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
 
-  editorArea: { alignItems: 'center', marginTop: 4, width: '100%', maxWidth: CONTAINER_WIDTH },
-  changeFileBtn: { backgroundColor: '#e2e8f0', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, marginBottom: 12 },
-  changeFileBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
-  
-  toolbarRow: { flexDirection: 'row', gap: 6, marginBottom: 12, backgroundColor: '#ffffff', padding: 6, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%', justifyContent: 'space-around' },
-  toolBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 8, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderColor: '#e2e8f0', borderWidth: 1 },
+  featureGrid: { flexDirection: 'row', gap: 6, width: '100%', flexWrap: 'wrap' },
+  featureItem: { flex: 1, minWidth: 90, backgroundColor: '#f8fafc', borderRadius: 10, padding: 8, alignItems: 'center', borderWidth: 1, borderColor: '#f1f5f9' },
+  featureIcon: { fontSize: 18, marginBottom: 2 },
+  featureTitle: { fontSize: 11, fontWeight: 'bold', color: '#1e293b', marginBottom: 2, textAlign: 'center' },
+  featureDesc: { fontSize: 9, color: '#64748b', textAlign: 'center' },
+
+  editorArea: { alignItems: 'center', marginTop: 2, width: '100%' },
+  changeFileBtn: { backgroundColor: '#e2e8f0', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6, marginBottom: 10 },
+  changeFileBtnText: { fontSize: 11, fontWeight: 'bold', color: '#334155' },
+
+  toolbarRow: { flexDirection: 'row', gap: 4, marginBottom: 8, backgroundColor: '#ffffff', padding: 4, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%', flexWrap: 'wrap', justifyContent: 'center' },
+  toolBtn: { flex: 1, minWidth: 70, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderColor: '#e2e8f0', borderWidth: 1 },
   activeToolBtn: { backgroundColor: '#0052D4', borderColor: '#0052D4' },
-  toolBtnText: { fontSize: 12, fontWeight: 'bold', color: '#334155' },
+  toolBtnText: { fontSize: 11, fontWeight: 'bold', color: '#334155' },
   activeToolBtnText: { color: '#ffffff' },
+
+  zoomControlRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justify: 'space-between',
+    gap: 6,
+    backgroundColor: '#ffffff',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    marginBottom: 8,
+    width: '100%',
+  },
+  zoomBtn: { backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 14 },
+  zoomBtnText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
+  zoomResetBtn: { paddingHorizontal: 4 },
+  zoomResetText: { fontSize: 11, fontWeight: 'bold', color: '#0052D4' },
+
+  fontDefaultControl: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f8fafc', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
+  fontBtnText: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', paddingHorizontal: 4 },
+  fontSizeLabel: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
+
+  /* 🎯 סרגל ניהול מרכזי ונקי לאלמנט שנבחר */
+  selectedElementControlDock: {
+    width: '100%',
+    backgroundColor: '#ffffff',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1.5,
+    borderColor: '#0052D4',
+    marginBottom: 10,
+    elevation: 3,
+  },
+  dockHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  dockTitle: { fontSize: 12, fontWeight: 'bold', color: '#0f172a', flex: 1 },
+  dockCloseBtn: { backgroundColor: '#e2e8f0', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6 },
+  dockCloseText: { fontSize: 10, fontWeight: 'bold', color: '#334155' },
+
+  dockControlsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 6 },
+  dockGroup: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  dockGroupLabel: { fontSize: 10, fontWeight: 'bold', color: '#64748b' },
+
+  nudgeBtn: { backgroundColor: '#f1f5f9', paddingHorizontal: 7, paddingVertical: 4, borderRadius: 6, borderWidth: 1, borderColor: '#cbd5e1' },
+  nudgeText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
+  fontSizeBadge: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', paddingHorizontal: 2 },
+
+  dockDeleteBtn: { backgroundColor: '#fef2f2', borderWidth: 1, borderColor: '#fca5a5', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  dockDeleteText: { color: '#dc2626', fontSize: 11, fontWeight: 'bold' },
 
   signatureCanvasBox: {
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#cbd5e1',
     borderRadius: 8,
-    cursor: 'crosshair',
-    touchAction: 'none',
   },
 
-  button: { backgroundColor: '#0052D4', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  buttonText: { color: '#ffffff', fontSize: 14, fontWeight: 'bold' },
+  button: { backgroundColor: '#0052D4', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 8 },
+  buttonText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
 
-  paginationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: '#cbd5e1', width: '100%' },
-  pageBtn: { backgroundColor: '#0052D4', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 6 },
+  paginationRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 10, marginBottom: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%' },
+  pageBtn: { backgroundColor: '#0052D4', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6 },
   disabledBtn: { backgroundColor: '#cbd5e1' },
-  pageBtnText: { color: '#fff', fontSize: 12, fontWeight: 'bold' },
-  pageBadgeTextContainer: { backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 },
-  pageIndicatorText: { fontSize: 12, fontWeight: 'bold', color: '#1e293b' },
+  pageBtnText: { color: '#fff', fontSize: 11, fontWeight: 'bold' },
+  pageBadgeTextContainer: { backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6 },
+  pageIndicatorText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
 
   pdfViewerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, position: 'relative', overflow: 'hidden' },
-  mobilePlaceholder: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#e2e8f0' },
-  
+
   draggableItemWrapper: {
     position: 'absolute',
     alignSelf: 'flex-start',
     zIndex: 10,
-    cursor: 'move',
-    // @ts-ignore
-    userSelect: 'none',
-    WebkitUserSelect: 'none',
-    touchAction: 'none',
+    padding: 2,
+    borderRadius: 4,
+  },
+  selectedItemOutline: {
+    borderWidth: 1.5,
+    borderColor: '#0052D4',
+    borderStyle: 'dashed',
+    backgroundColor: 'rgba(239, 246, 255, 0.3)',
   },
   overlayText: {
     color: '#000',
@@ -1630,35 +1958,34 @@ const styles = StyleSheet.create({
     fontFamily: 'Arial, sans-serif',
     paddingHorizontal: 0,
     margin: 0,
-    // @ts-ignore
-    userSelect: 'none',
-    WebkitUserSelect: 'none',
   },
   highlightBox: { backgroundColor: 'rgba(255, 235, 50, 0.45)' },
   redactBox: { backgroundColor: '#000000' },
-  selectedBoxBorder: { borderWidth: 1, borderColor: '#0052D4', borderStyle: 'dashed' },
-  baselineGuide: { position: 'absolute', bottom: -2, left: 0, right: 0, height: 2, backgroundColor: '#0052D4' },
-  
-  floatingActionBar: { position: 'absolute', top: -32, left: 0, backgroundColor: '#1e293b', paddingVertical: 3, paddingHorizontal: 6, borderRadius: 6, flexDirection: 'row', alignItems: 'center', gap: 6, zIndex: 99 },
-  actionBadgeBtn: { backgroundColor: '#334155', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  deleteBadgeBtn: { backgroundColor: '#dc2626' },
-  actionBadgeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
-  fontSizeText: { color: '#ffffff', fontSize: 11, fontWeight: 'bold' },
 
-  inputPopup: { position: 'absolute', backgroundColor: '#fff', padding: 6, borderRadius: 6, borderWidth: 1, borderColor: '#0052D4', flexDirection: 'row', gap: 6, zIndex: 999 },
-  popupInput: { borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 4, paddingHorizontal: 8, width: 150, height: 32, fontSize: 12, textAlign: 'right' },
-  addBtn: { backgroundColor: '#0052D4', paddingHorizontal: 10, justifyContent: 'center', alignItems: 'center', borderRadius: 4 },
-  actionButtonsRow: { flexDirection: 'row', gap: 12, marginTop: 16, width: '100%' },
-  actionBtn: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, borderRadius: 8, alignItems: 'center' },
+  promptTextInput: {
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#cbd5e1',
+    borderRadius: 8,
+    padding: 12,
+    minHeight: 90,
+    textAlign: 'right',
+    fontSize: 14,
+    backgroundColor: '#f8fafc',
+    textAlignVertical: 'top',
+  },
+
+  actionButtonsRow: { flexDirection: 'row', gap: 8, marginTop: 12, width: '100%' },
+  actionBtn: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center' },
   previewBtn: { backgroundColor: '#d97706' },
   downloadBtn: { backgroundColor: '#16a34a' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 480, alignItems: 'center', elevation: 8 },
-  modalTitle: { fontSize: 20, fontWeight: 'bold', color: '#0f172a', marginBottom: 8 },
-  modalSubtitle: { fontSize: 13, color: '#64748b', textAlign: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: 'bold', color: '#1e293b', marginTop: 10, marginBottom: 8, alignSelf: 'flex-start' },
-  authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 40, marginBottom: 10, textAlign: 'right' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 12 },
+  modalCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 480, alignItems: 'center', elevation: 8 },
+  modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', marginBottom: 6 },
+  modalSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 14 },
+  sectionTitle: { fontSize: 13, fontWeight: 'bold', color: '#1e293b', marginTop: 8, marginBottom: 6, alignSelf: 'flex-start' },
+  authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 38, marginBottom: 8, textAlign: 'right', fontSize: 12 },
 
   userExistsWarningBox: {
     width: '100%',
@@ -1666,30 +1993,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#fca5a5',
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 14,
+    padding: 10,
+    marginBottom: 12,
     alignItems: 'center',
   },
-  warningTitle: { fontSize: 14, fontWeight: 'bold', color: '#991b1b', marginBottom: 4 },
-  warningText: { fontSize: 12, color: '#7f1d1d', marginBottom: 8, textAlign: 'center' },
-  switchLoginBtn: { backgroundColor: '#dc2626', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 6 },
-  switchLoginBtnText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
+  warningTitle: { fontSize: 13, fontWeight: 'bold', color: '#991b1b', marginBottom: 2 },
+  warningText: { fontSize: 11, color: '#7f1d1d', marginBottom: 6, textAlign: 'center' },
+  switchLoginBtn: { backgroundColor: '#dc2626', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 6 },
+  switchLoginBtnText: { color: '#ffffff', fontSize: 12, fontWeight: 'bold' },
 
-  plansContainer: { flexDirection: 'row', gap: 8, width: '100%', marginVertical: 14 },
-  planCard: { flex: 1, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 10, alignItems: 'center', backgroundColor: '#f8fafc' },
+  plansContainer: { flexDirection: 'row', gap: 6, width: '100%', marginVertical: 10, flexWrap: 'wrap' },
+  planCard: { flex: 1, minWidth: 90, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, padding: 8, alignItems: 'center', backgroundColor: '#f8fafc' },
   selectedPlanCard: { borderColor: '#0052D4', backgroundColor: '#eff6ff', borderWidth: 2 },
-  planName: { fontSize: 13, fontWeight: 'bold', color: '#0f172a' },
-  planPrice: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', marginVertical: 4 },
-  planDesc: { fontSize: 10, color: '#64748b', textAlign: 'center' },
+  planName: { fontSize: 12, fontWeight: 'bold', color: '#0f172a' },
+  planPrice: { fontSize: 10, fontWeight: 'bold', color: '#0052D4', marginVertical: 2 },
+  planDesc: { fontSize: 9, color: '#64748b', textAlign: 'center' },
 
   previewImageContainer: { width: '100%', backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0', overflow: 'hidden' },
-  adBannerBox: { width: '100%', height: 180, backgroundColor: '#f8fafc', borderWidth: 2, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  adPlaceholderText: { fontSize: 15, fontWeight: 'bold', color: '#94a3b8' },
-  timerBox: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  timerText: { fontSize: 14, fontWeight: 'bold', color: '#334155' },
-  timerCount: { color: '#0052D4', fontSize: 16 },
-  modalDownloadBtn: { backgroundColor: '#16a34a', paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, width: '100%', alignItems: 'center' },
-  modalDownloadBtnText: { color: '#fff', fontSize: 15, fontWeight: 'bold' },
-  modalCancelBtn: { paddingVertical: 8, paddingHorizontal: 16 },
-  modalCancelBtnText: { color: '#dc2626', fontSize: 13, fontWeight: 'bold' },
+  adBannerBox: { width: '100%', height: 150, backgroundColor: '#f8fafc', borderWidth: 2, borderColor: '#cbd5e1', borderStyle: 'dashed', borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  adPlaceholderText: { fontSize: 13, fontWeight: 'bold', color: '#94a3b8' },
+  timerBox: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  timerText: { fontSize: 13, fontWeight: 'bold', color: '#334155' },
+  timerCount: { color: '#0052D4', fontSize: 15 },
+  modalDownloadBtn: { backgroundColor: '#16a34a', paddingVertical: 10, paddingHorizontal: 16, borderRadius: 8, width: '100%', alignItems: 'center' },
+  modalDownloadBtnText: { color: '#fff', fontSize: 14, fontWeight: 'bold' },
+  modalCancelBtn: { paddingVertical: 6, paddingHorizontal: 12 },
+  modalCancelBtnText: { color: '#dc2626', fontSize: 12, fontWeight: 'bold' },
 });
