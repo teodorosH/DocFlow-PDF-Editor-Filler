@@ -845,27 +845,31 @@ export default function PdfEditorScreen() {
     }
   };
 
-  const handleCanvasClick = (clickX: number, clickY: number) => {
+ const handleCanvasClick = (clickX: number, clickY: number) => {
     if (selectedElementId) {
       setSelectedElementId(null);
       return;
     }
 
-    if (!pdfUri) return;
+    if (!pdfUri || !pdfDimensions) return;
+
+    // המרה מדויקת לפי יחס הרוחב והגובה הנוכחי של הקנבס המוצג
+    const relativeX = clickX / CONTAINER_WIDTH;
+    const relativeY = clickY / containerHeight;
 
     if (activeTool === 'text') {
-      setActiveInput({ x: clickX, y: clickY });
+      setActiveInput({ x: relativeX, y: relativeY });
     } else if (activeTool === 'signature') {
-      setSignatureClickPos({ x: clickX, y: clickY });
+      setSignatureClickPos({ x: relativeX, y: relativeY });
       setShowSignatureModal(true);
     } else {
       const newElement: EditorElement = {
         id: Date.now().toString(),
         type: activeTool,
-        x: Math.max(0, clickX - 60),
-        y: Math.max(0, clickY - 10),
-        width: 120,
-        height: 20,
+        x: relativeX,
+        y: relativeY,
+        width: 120 / CONTAINER_WIDTH,
+        height: 20 / containerHeight,
         fontSize: defaultFontSize,
         pageIndex: currentPageIndex,
       };
@@ -889,10 +893,10 @@ export default function PdfEditorScreen() {
       id: Date.now().toString(),
       type: 'text',
       text: currentText,
-      x: activeInput.x,
-      y: activeInput.y,
-      width: 120,
-      height: 20,
+      x: activeInput.x, // כבר יחסי
+      y: activeInput.y, // כבר יחסי
+      width: 120 / CONTAINER_WIDTH,
+      height: 30 / containerHeight,
       fontSize: defaultFontSize,
       pageIndex: currentPageIndex,
     };
@@ -927,42 +931,28 @@ export default function PdfEditorScreen() {
     for (const el of elements) {
       const targetPage = pages[el.pageIndex] || pages[0];
 
-if (el.type === 'text' && el.text) {
+      // המרה ישירה של המיקום היחסי למידות אמיתיות של עמוד ה-PDF
+      const pdfTargetX = el.x * pdfDimensions.width;
+      const pdfTargetYFromTop = el.y * pdfDimensions.height;
+
+      if (el.type === 'text' && el.text) {
         if (Platform.OS === 'web') {
           const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
           if (base64Png) {
             const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
             const pngImage = await pdfDoc.embedPng(imageBytes);
-            const finalImgWidth = imgW * scaleX;
-            const finalImgHeight = imgH * scaleY;
-            const finalPdfX = el.x * scaleX;
             
-            // 🚀 הוספת מקדם תיקון אנכי (מוריד את הטקסט מעט למטה כדי להתאים בול לקו במסך)
-            const verticalOffset = el.fontSize * 0.3 * scaleY;
-            const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight - verticalOffset;
+            const finalImgWidth = imgW * (pdfDimensions.width / CONTAINER_WIDTH);
+            const finalImgHeight = imgH * (pdfDimensions.height / containerHeight);
+            const verticalOffset = el.fontSize * 0.3 * (pdfDimensions.height / containerHeight);
+            const finalPdfY = pdfDimensions.height - pdfTargetYFromTop - finalImgHeight - verticalOffset;
 
             targetPage.drawImage(pngImage, {
-              x: Math.max(0, finalPdfX),
+              x: Math.max(0, pdfTargetX),
               y: finalPdfY,
               width: finalImgWidth,
               height: finalImgHeight,
             });
-          }
-        } else {
-          // 🚀 הוספת תיקון אנכי גם למובייל
-          const finalPdfX = el.x * scaleX;
-          const verticalOffset = el.fontSize * 0.3 * scaleY;
-          const finalPdfY = pdfDimensions.height - (el.y * scaleY) - (el.fontSize * scaleY) - verticalOffset;
-          
-          try {
-            targetPage.drawText(el.text, {
-              x: Math.max(0, finalPdfX),
-              y: Math.max(0, finalPdfY),
-              size: el.fontSize * scaleY,
-              color: rgb(0, 0, 0),
-            });
-          } catch (fontErr) {
-            console.warn('Text draw warning:', fontErr);
           }
         }
       } else if (el.type === 'signature' && el.imageUri) {
@@ -976,18 +966,18 @@ if (el.type === 'text' && el.text) {
           pdfImage = await pdfDoc.embedPng(imageBytes);
         }
 
-        const finalWidth = el.width * scaleX;
-        const finalHeight = el.height * scaleY;
-
-        const finalPdfX = el.x * scaleX;
-        const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
+        const finalWidth = (el.width || 120 / CONTAINER_WIDTH) * pdfDimensions.width;
+        const finalHeight = (el.height || 60 / containerHeight) * pdfDimensions.height;
+        const finalPdfY = pdfDimensions.height - pdfTargetYFromTop - finalHeight;
 
         targetPage.drawImage(pdfImage, {
-          x: Math.max(0, finalPdfX),
+          x: Math.max(0, pdfTargetX),
           y: finalPdfY,
           width: finalWidth,
           height: finalHeight,
         });
+      // וכך הלאה עבור highlight ו-redact בהתאמה לפי pdfTargetX ו-pdfTargetYFromTop
+
       } else if (el.type === 'highlight' || el.type === 'redact') {
         const finalWidth = el.width * scaleX;
         const finalHeight = el.height * scaleY;
@@ -1348,6 +1338,7 @@ if (el.type === 'text' && el.text) {
                         isSelected={selectedElementId === el.id}
                         onSelect={() => setSelectedElementId(el.id)}
                         containerBounds={{ width: CONTAINER_WIDTH, height: containerHeight }}
+                        zoomScale={zoomScale} // 👈 העברת הזום הנוכחי לרכיב
                         onUpdatePos={(id, x, y) => {
                           setElements((prev) => prev.map((item) => (item.id === id ? { ...item, x, y } : item)));
                         }}
@@ -1672,11 +1663,12 @@ if (el.type === 'text' && el.text) {
   );
 }
 
-function DraggableItem({
+  function DraggableItem({
   element,
   isSelected,
   onSelect,
   containerBounds,
+  zoomScale,
   onUpdatePos,
   onDragStart,
   onDragEnd,
@@ -1685,13 +1677,23 @@ function DraggableItem({
   isSelected: boolean;
   onSelect: () => void;
   containerBounds: { width: number; height: number };
-  onUpdatePos: (id: string, x: number, y: number) => void;
+  zoomScale: number;
+  onUpdatePos: (id: string | number, newRelativeX: number, newRelativeY: number) => void;
   onDragStart?: () => void;
   onDragEnd?: () => void;
 }) {
-  const startPos = useRef({ x: element.x, y: element.y });
+  // חישוב מחדש של המיקום והמידות על המסך בהתאם לרוחב/גובה הקנבס הנוכחי (שמושפע מהזום)
+  const absoluteX = element.x * containerBounds.width;
+  const absoluteY = element.y * containerBounds.height;
   
-  // 🚀 שומר את הנתונים העדכניים של האלמנט למניעת Stale Closure
+  // אם הרוחב/גובה שמורים כיחס, נכפול במידות הקנבס. אם לא, ניקח ברירת מחדל יחסית
+  const absoluteWidth = (element.width && element.width < 5 ? element.width * containerBounds.width : 120 * zoomScale);
+  const absoluteHeight = (element.height && element.height < 5 ? element.height * containerBounds.height : 30 * zoomScale);
+
+  // התאמה ישירה של הפונט לפי יחס הזום ביחס לבסיס
+  const scaledFontSize = (element.fontSize || 15) * zoomScale;
+
+  const startPos = useRef({ x: absoluteX, y: absoluteY });
   const elementRef = useRef(element);
   useEffect(() => {
     elementRef.current = element;
@@ -1704,15 +1706,22 @@ function DraggableItem({
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        // 🚀 לוקח את המיקום האמיתי והעדכני ביותר מהרפרנס
-        startPos.current = { x: elementRef.current.x, y: elementRef.current.y };
+        startPos.current = {
+          x: elementRef.current.x * containerBounds.width,
+          y: elementRef.current.y * containerBounds.height,
+        };
         onSelect();
         onDragStart?.();
       },
       onPanResponderMove: (_, gestureState) => {
-        const newX = Math.max(0, Math.min(containerBounds.width - 20, startPos.current.x + gestureState.dx));
-        const newY = Math.max(0, Math.min(containerBounds.height - 15, startPos.current.y + gestureState.dy));
-        onUpdatePos(elementRef.current.id, newX, newY);
+        const newAbsX = Math.max(0, Math.min(containerBounds.width - 20, startPos.current.x + gestureState.dx));
+        const newAbsY = Math.max(0, Math.min(containerBounds.height - 15, startPos.current.y + gestureState.dy));
+        
+        // המרה חזרה ליחס נקי (בין 0 ל-1) מתוך הקנבס הנוכחי
+        const relX = newAbsX / containerBounds.width;
+        const relY = newAbsY / containerBounds.height;
+
+        onUpdatePos(elementRef.current.id, relX, relY);
       },
       onPanResponderRelease: () => {
         onDragEnd?.();
@@ -1729,14 +1738,15 @@ function DraggableItem({
       style={[
         styles.draggableItemWrapper,
         {
-          left: element.x,
-          top: element.y,
+          left: absoluteX,
+          top: absoluteY,
+          width: absoluteWidth,
         },
         isSelected && styles.selectedItemOutline,
       ]}
     >
       {element.type === 'text' && (
-        <Text style={[styles.overlayText, { fontSize: element.fontSize, lineHeight: element.fontSize * 1.2 }]}>
+        <Text style={[styles.overlayText, { fontSize: scaledFontSize, lineHeight: scaledFontSize * 1.2 }]}>
           {element.text}
         </Text>
       )}
@@ -1744,27 +1754,17 @@ function DraggableItem({
       {element.type === 'signature' && element.imageUri && (
         <Image
           source={{ uri: element.imageUri }}
-          style={{ width: element.width, height: element.height }}
+          style={{ width: '100%', height: absoluteHeight }}
           resizeMode="contain"
         />
       )}
 
       {element.type === 'highlight' && (
-        <View
-          style={[
-            styles.highlightBox,
-            { width: element.width, height: element.height },
-          ]}
-        />
+        <View style={[styles.highlightBox, { width: '100%', height: absoluteHeight }]} />
       )}
 
       {element.type === 'redact' && (
-        <View
-          style={[
-            styles.redactBox,
-            { width: element.width, height: element.height },
-          ]}
-        />
+        <View style={[styles.redactBox, { width: '100%', height: absoluteHeight }]} />
       )}
     </View>
   );
