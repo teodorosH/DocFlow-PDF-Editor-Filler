@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { useColorScheme } from 'react-native';
 
 import { AnimatedSplashOverlay } from '@/components/animated-icon';
-import AppTabs from './(tabs)/_layout.tsx'
+import AppTabs from '@/components/app-tabs';
 
 SplashScreen.preventAutoHideAsync();
 
