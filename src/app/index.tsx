@@ -1,4 +1,5 @@
 import { loadPDFDocument } from '@/utils/pdfLoader';
+import { useLanguage } from '@/context/LanguageContext';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -25,7 +26,7 @@ import { WebView } from 'react-native-webview';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://docflow.teoplatform.com';
 
-type ToolType = 'text' | 'highlight' | 'redact' | 'signature';
+type ToolType = 'text' | 'highlight' | 'redact' | 'signature' | 'zoom';
 type PlanType = 'free' | 'micro_pass' | 'premium';
 type Language = 'he' | 'en' | 'ar' | 'am';
 
@@ -37,6 +38,7 @@ interface User {
   plan: PlanType;
   editsCount: number;
   passCredits: number;
+  preferredLanguage?: Language;
 }
 
 interface EditorElement {
@@ -72,6 +74,8 @@ const I18N = {
     redactToolDesc: 'הסתר מידע רגיש וחסוי בבטחה',
     signatureTool: '🖋️ חתימה',
     signatureToolDesc: 'חתימה בנגיעה או בעכבר',
+    zoomTool: '🔎 זכוכית מגדלת',
+    zoomToolDesc: 'תצוגה מוגדלת נגררת מעל הנגיעה',
     preview: '👁️ תצוגה מקדימה',
     download: '💾 הורד PDF סופי',
     loginRegister: '🔑 התחבר / הרשם',
@@ -101,6 +105,50 @@ const I18N = {
     noAccountYet: 'אין לך חשבון? הרשם כאן',
     continueToPlan: 'המשך לבחירת מסלול ➔',
     finishRegister: 'סיום הרשמה והתחל ✅',
+    magnifierScaleLabel: '🔎 הגדלת זכוכית מגדלת:',
+    position: 'מיקום:',
+    font: 'פונט:',
+    width: 'רוחב:',
+    delete: '🗑️ מחק',
+    done: '✓ סיום',
+    selectedElement: '🎯 אלמנט נבחר',
+    addTextTitle: '✍️ הוספת טקסט למסמך',
+    addTextSubtitle: 'הקלד את הטקסט שברצונך למקם במסמך:',
+    typeHerePlaceholder: 'הקלד כאן...',
+    addToDocument: 'הוסף למסמך ✅',
+    availableIn: 'זמין בעוד',
+    seconds: 'שניות...',
+    continueNow: '✅ המשך כעת',
+    userAlreadyExistsTitle: '⚠️ המייל כבר רשום במערכת!',
+    userAlreadyExistsDesc: 'כתובת המייל כבר קיימת ב-DocFlow.',
+    switchToLogin: '🔑 לחץ כאן למעבר להתחברות',
+    free: 'חינם',
+    uploadErrorTitle: 'שגיאה בטעינת הקובץ',
+    uploadErrorDesc: 'לא ניתן לקרוא את קובץ ה-PDF שנבחר.',
+    guestLimitAlert: 'משתמשים אורחים יכולים לערוך את עמוד 1 בלבד. הרשם בחינם כדי לערוך את כל עמודי הקובץ!',
+    adNoticeUpload: 'אורח? הרשם בחינם כדי לבטל את זמן ההמתנה בהעלאת קבצים!',
+    adNoticePreview: 'אורחים צופים בפרסומת קצרה. הרשמה בחינם תפתח תצוגה מקדימה מיידית!',
+    adNoticeDownloadUser: 'משתמש חינם? צפה בפרסומת קצרה להורדה.',
+    adNoticeDownloadGuest: 'אורח יקר, צפה בפרסומת לפתיחת ההורדה. הרשמה חינמית תוריד את זמן ההמתנה!',
+    quotaExceeded: 'הגעת למכסת העריכות שלך.',
+    buyPass: 'רכוש חבילת 10 עריכות ב-₪9.90 🎟️',
+    downloadSuccess: 'הקובץ הורד בהצלחה! 🎉',
+    welcome: 'ברוך הבא! 👋',
+    drawSignaturePrompt: 'נא לצייר חתימה לפני האישור',
+    emptySignatureTitle: 'חתימה ריקה',
+    loadingFile: '⏳ טוען קובץ PDF...',
+    previewTitle: '👁️ מכין תצוגה מקדימה...',
+    downloadTitle: '💾 מכין קובץ להורדה...',
+    profileTitle: '👤 אזור אישי',
+    profileEmail: 'כתובת מייל:',
+    profileName: 'שם מלא:',
+    profilePlan: 'חבילה נוכחית:',
+    profileEditsLeft: 'יתרת עריכות:',
+    upgradePlanBtn: '⭐ שדרג חבילה',
+    saveName: '💾 שמור שם',
+    preferredLangLabel: 'שפת ממשק מועדפת:',
+    unlimitedEdits: 'ללא הגבלה ♾️',
+    editsCountText: '{count} עריכות',
   },
   en: {
     heroTitle: 'PDF Edit, Fill & Sign 📄✍️',
@@ -115,6 +163,8 @@ const I18N = {
     redactToolDesc: 'Hide sensitive and confidential text',
     signatureTool: '🖋️ Signature',
     signatureToolDesc: 'Sign with touch or mouse',
+    zoomTool: '🔎 Magnifier',
+    zoomToolDesc: 'Draggable magnifying lens over touch',
     preview: '👁️ Preview',
     download: '💾 Download PDF',
     loginRegister: '🔑 Login / Register',
@@ -144,6 +194,50 @@ const I18N = {
     noAccountYet: "Don't have an account? Register",
     continueToPlan: 'Continue to select plan ➔',
     finishRegister: 'Complete Registration ✅',
+    magnifierScaleLabel: '🔎 Magnifier Scale:',
+    position: 'Position:',
+    font: 'Font:',
+    width: 'Width:',
+    delete: '🗑️ Delete',
+    done: '✓ Done',
+    selectedElement: '🎯 Selected Element',
+    addTextTitle: '✍️ Add Text to Document',
+    addTextSubtitle: 'Type the text you want to place on the document:',
+    typeHerePlaceholder: 'Type here...',
+    addToDocument: 'Add to Document ✅',
+    availableIn: 'Available in',
+    seconds: 'seconds...',
+    continueNow: '✅ Continue Now',
+    userAlreadyExistsTitle: '⚠️ Email already registered!',
+    userAlreadyExistsDesc: 'This email address already exists in DocFlow.',
+    switchToLogin: '🔑 Click here to Login',
+    free: 'Free',
+    uploadErrorTitle: 'File Upload Error',
+    uploadErrorDesc: 'Cannot read the selected PDF file.',
+    guestLimitAlert: 'Guest users can only edit page 1. Register for free to edit all pages!',
+    adNoticeUpload: 'Guest? Register for free to skip upload wait times!',
+    adNoticePreview: 'Guests watch a short ad. Free registration unlocks instant preview!',
+    adNoticeDownloadUser: 'Free user? Watch a short ad to download.',
+    adNoticeDownloadGuest: 'Dear guest, watch an ad to unlock download. Free registration reduces wait time!',
+    quotaExceeded: 'You have reached your edit limit.',
+    buyPass: 'Buy 10 edits pass for ₪9.90 🎟️',
+    downloadSuccess: 'File downloaded successfully! 🎉',
+    welcome: 'Welcome! 👋',
+    drawSignaturePrompt: 'Please draw a signature before confirming',
+    emptySignatureTitle: 'Empty Signature',
+    loadingFile: '⏳ Loading PDF file...',
+    previewTitle: '👁️ Preparing preview...',
+    downloadTitle: '💾 Preparing file for download...',
+    profileTitle: '👤 Personal Profile',
+    profileEmail: 'Email Address:',
+    profileName: 'Full Name:',
+    profilePlan: 'Current Plan:',
+    profileEditsLeft: 'Remaining Edits:',
+    upgradePlanBtn: '⭐ Upgrade Plan',
+    saveName: '💾 Save Name',
+    preferredLangLabel: 'Preferred Language:',
+    unlimitedEdits: 'Unlimited ♾️',
+    editsCountText: '{count} edits',
   },
   ar: {
     heroTitle: 'تعديل وتعبئة وتوقيع PDF 📄✍️',
@@ -158,6 +252,8 @@ const I18N = {
     redactToolDesc: 'إخفاء المعلومات الحساسة',
     signatureTool: '🖋️ توقيع',
     signatureToolDesc: 'التوقيع باللمس أو الماوس',
+    zoomTool: '🔎 مكبر',
+    zoomToolDesc: 'عدسة مكبرة تحوم فوق المستند',
     preview: '👁️ معاينة',
     download: '💾 تحميل PDF',
     loginRegister: '🔑 تسجيل الدخول',
@@ -187,6 +283,50 @@ const I18N = {
     noAccountYet: 'ليس لديك حساب؟ سجل الآن',
     continueToPlan: 'متابعة لاختيار الخطة ➔',
     finishRegister: 'إكمال التسجيل ✅',
+    magnifierScaleLabel: '🔎 تكبير العدسة:',
+    position: 'الموقع:',
+    font: 'الخط:',
+    width: 'العرض:',
+    delete: '🗑️ حذف',
+    done: '✓ تم',
+    selectedElement: '🎯 العنصر المحدد',
+    addTextTitle: '✍️ إضافة نص للمستند',
+    addTextSubtitle: 'اكتب النص الذي تريد وضعه في المستند:',
+    typeHerePlaceholder: 'اكتب هنا...',
+    addToDocument: 'إضافة للمستند ✅',
+    availableIn: 'متاح خلال',
+    seconds: 'ثوانٍ...',
+    continueNow: '✅ المتابعة الآن',
+    userAlreadyExistsTitle: '⚠️ البريد الإلكتروني مسجل بالفعل!',
+    userAlreadyExistsDesc: 'عنوان البريد الإلكتروني هذا موجود بالفعل في DocFlow.',
+    switchToLogin: '🔑 انقر هنا لتسجيل الدخول',
+    free: 'مجاناً',
+    uploadErrorTitle: 'خطأ في تحميل الملف',
+    uploadErrorDesc: 'لا يمكن قراءة ملف PDF المحدد.',
+    guestLimitAlert: 'يمكن للزوار تعديل الصفحة 1 فقط. سجل مجاناً لتعديل جميع الصفحات!',
+    adNoticeUpload: 'زائر؟ سجل مجاناً لإلغاء وقت الانتظار عند رفع الملفات!',
+    adNoticePreview: 'يشاهد الزوار إعلاناً قصيراً. التسجيل المجاني يفتح المعاينة الفورية!',
+    adNoticeDownloadUser: 'مستخدم مجاني؟ شاهد إعلاناً قصيراً للتحميل.',
+    adNoticeDownloadGuest: 'عزيزي الزائر، شاهد إعلاناً لفتح التحميل. التسجيل المجاني يقلل وقت الانتظار!',
+    quotaExceeded: 'لقد وصلت إلى حد التعديل الخاص بك.',
+    buyPass: 'شراء باقة 10 تعديلات بـ ₪9.90 🎟️',
+    downloadSuccess: 'تم تحميل الملف بنجاح! 🎉',
+    welcome: 'أهلاً بك! 👋',
+    drawSignaturePrompt: 'يرجى رسم التوقيع قبل التأكيد',
+    emptySignatureTitle: 'توقيع فارغ',
+    loadingFile: '⏳ جاري تحميل ملف PDF...',
+    previewTitle: '👁️ جاري إعداد المعاينة...',
+    downloadTitle: '💾 جاري إعداد الملف للتحميل...',
+    profileTitle: '👤 الملف الشخصي',
+    profileEmail: 'البريد الإلكتروني:',
+    profileName: 'الاسم الكامل:',
+    profilePlan: 'الخطة الحالية:',
+    profileEditsLeft: 'التعديلات المتبقية:',
+    upgradePlanBtn: '⭐ ترقية الخطة',
+    saveName: '💾 حفظ الاسم',
+    preferredLangLabel: 'اللغة المفضلة:',
+    unlimitedEdits: 'بلا حدود ♾️',
+    editsCountText: '{count} تعديلات',
   },
   am: {
     heroTitle: 'ፒዲኤፍ ማስተካከል፣ መሙላት እና መፈረም 📄✍️',
@@ -201,6 +341,8 @@ const I18N = {
     redactToolDesc: 'ሚስጥራዊ መረጃዎችን ደብቅ',
     signatureTool: '🖋️ ፊርማ',
     signatureToolDesc: 'በንክኪ ወይም በሲያን ይፈርሙ',
+    zoomTool: '🔎 ማጉያ',
+    zoomToolDesc: 'በንክኪ ላይ የሚንሳፈፍ ማጉያ',
     preview: '👁️ ቅድመ እይታ',
     download: '💾 ፒዲኤፍ አውርድ',
     loginRegister: '🔑 ግባ / ተመዝገብ',
@@ -230,6 +372,50 @@ const I18N = {
     noAccountYet: 'መለያ የለዎትም? ይመዝገቡ',
     continueToPlan: 'ወደ ዕቅድ ምርጫ ቀጥል ➔',
     finishRegister: 'ምዝገባ ጨርስ ✅',
+    magnifierScaleLabel: '🔎 የማጉያ መጠን:',
+    position: 'ቦታ:',
+    font: 'ፎንት:',
+    width: 'ስፋት:',
+    delete: '🗑️ ሰርዝ',
+    done: '✓ ተጠናቋል',
+    selectedElement: '🎯 የተመረጠው ነገር',
+    addTextTitle: '✍️ ወደ ሰነዱ ጽሑፍ ጨምር',
+    addTextSubtitle: 'በሰነዱ ላይ ማስቀመጥ የሚፈልጉትን ጽሑፍ ይፃፉ:',
+    typeHerePlaceholder: 'እዚህ ይፃፉ...',
+    addToDocument: 'ወደ ሰነድ ጨምር ✅',
+    availableIn: 'በ',
+    seconds: 'ሰከንዶች ውስጥ...',
+    continueNow: '✅ አሁን ቀጥል',
+    userAlreadyExistsTitle: '⚠️ ኢሜይሉ አስቀድሞ ተመዝግቧል!',
+    userAlreadyExistsDesc: 'ይህ ኢሜይል አድራሻ በDocFlow ውስጥ ይገኛል።',
+    switchToLogin: '🔑 ወደ መግቢያ ለመቀየር እዚህ ይጫኑ',
+    free: 'ነፃ',
+    uploadErrorTitle: 'ፋይል የመጫን ስህተት',
+    uploadErrorDesc: 'የተመረጠውን ፒዲኤፍ ፋይል ማንበብ አልተቻለም።',
+    guestLimitAlert: 'እንግዶች ገጽ 1ን ብቻ ማስተካከል ይችላሉ። ሁሉንም ገጾች ለማስተካከል በነፃ ይመዝገቡ!',
+    adNoticeUpload: 'እንግዳ? ፋይል ሲጭኑ የመጠባበቂያ ጊዜን ለማስወገድ በነፃ ይመዝገቡ!',
+    adNoticePreview: 'እንግዶች አጭር ማስታወቂያ ያያሉ። ነፃ ምዝገባ ፈጣን ቅድመ እይታን ይከፍታል!',
+    adNoticeDownloadUser: 'ነፃ ተጠቃሚ? ለማውረድ አጭር ማስታወቂያ ይመልከቱ።',
+    adNoticeDownloadGuest: 'ውድ እንግዳ፣ ለማውረድ ማስታወቂያ ይመልከቱ። ነፃ ምዝገባ የመጠባበቂያ ጊዜን ይቀንሳል!',
+    quotaExceeded: 'የማስተካከያ ገደብዎ ላይ ደርሰዋል።',
+    buyPass: 'የ10 ማስተካከያ ፓስ በ₪9.90 ይግዙ 🎟️',
+    downloadSuccess: 'ፋይሉ በስኬት ወርዷል! 🎉',
+    welcome: 'እንኳን ደህና መጡ! 👋',
+    drawSignaturePrompt: 'እባክዎን ከማረጋገጥዎ በፊት ፊርማ ይሳሉ',
+    emptySignatureTitle: 'ባዶ ፊርማ',
+    loadingFile: '⏳ ፒዲኤፍ ፋይል በመጫን ላይ...',
+    previewTitle: '👁️ ቅድመ እይታ በማዘጋጀት ላይ...',
+    downloadTitle: '💾 ፋይል ለማውረድ በማዘጋጀት ላይ...',
+    profileTitle: '👤 የግል መገለጫ',
+    profileEmail: 'ኢሜይል አድራሻ:',
+    profileName: 'ሙሉ ስም:',
+    profilePlan: 'የአሁኑ ዕቅድ:',
+    profileEditsLeft: 'ቀሪ ማስተካከያዎች:',
+    upgradePlanBtn: '⭐ ዕቅድ ያሻሽሉ',
+    saveName: '💾 ስም አስቀምጥ',
+    preferredLangLabel: 'ተመራጭ ቋንቋ:',
+    unlimitedEdits: 'ያልተገደበ ♾️',
+    editsCountText: '{count} ማስተካከያዎች',
   },
 };
 
@@ -244,10 +430,9 @@ function DocFlowLogo() {
   );
 }
 
-// 🚀 פונקציית חילוץ חסינה למנוע ה-PDF
 async function getPdfLib() {
   const pdfLibModule = await loadPDFDocument();
-  if (!pdfLibModule) throw new Error('מנוע ה-PDF לא נטען');
+  if (!pdfLibModule) throw new Error('PDF engine failed to load');
 
   const PDFDocument = pdfLibModule.PDFDocument || pdfLibModule.default?.PDFDocument || pdfLibModule;
   const rgb = pdfLibModule.rgb || pdfLibModule.default?.rgb || ((r: number, g: number, b: number) => ({ type: 'RGB', red: r, green: g, blue: b }));
@@ -255,37 +440,27 @@ async function getPdfLib() {
   return { PDFDocument, rgb };
 }
 
-// 🚀 המרת Base64 ל-ArrayBuffer חסינה ללא תלות ב-atob בדפדפן/מובייל
-const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
-
-function _base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const cleanBase64 = base64.replace(/[^A-Za-z0-9+/=]/g, '');
-  const len = cleanBase64.length;
-  let bufferLength = len * 0.75;
-  if (cleanBase64.endsWith('==')) bufferLength -= 2;
-  else if (cleanBase64.endsWith('=')) bufferLength -= 1;
-
-  const bytes = new Uint8Array(bufferLength);
-  let p = 0;
-  for (let i = 0; i < len; i += 4) {
-    const encoded1 = BASE64_CHARS.indexOf(cleanBase64[i]);
-    const encoded2 = BASE64_CHARS.indexOf(cleanBase64[i + 1]);
-    const encoded3 = BASE64_CHARS.indexOf(cleanBase64[i + 2]);
-    const encoded4 = BASE64_CHARS.indexOf(cleanBase64[i + 3]);
-
-    bytes[p++] = (encoded1 << 2) | (encoded2 >> 4);
-    if (encoded3 !== 64 && encoded3 !== -1) {
-      bytes[p++] = ((encoded2 & 15) << 4) | (encoded3 >> 2);
-    }
-    if (encoded4 !== 64 && encoded4 !== -1) {
-      bytes[p++] = ((encoded3 & 3) << 6) | encoded4;
-    }
+function _atobPolyfill(input: string): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+  let str = input.replace(/=+$/, '');
+  let output = '';
+  if (str.length % 4 === 1) {
+    throw new Error("'atob' failed: The string to be decoded is not correctly encoded.");
   }
-  return bytes.buffer;
+  for (
+    let bc = 0, bs = 0, buffer, idx = 0;
+    (buffer = str.charAt(idx++));
+    ~buffer && ((bs = bc % 4 ? bs * 64 + buffer : buffer), bc++ % 4)
+      ? (output += String.fromCharCode(255 & (bs >> ((-2 * bc) & 6))))
+      : 0
+  ) {
+    buffer = chars.indexOf(buffer);
+  }
+  return output;
 }
 
-// 🚀 המרת Uint8Array ל-Base64 חסינה ללא תלות ב-btoa בדפדפן/מובייל
-function _uint8ArrayToBase64(bytes: Uint8Array): string {
+function _btoaPolyfill(bytes: Uint8Array): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
   let base64 = '';
   const len = bytes.length;
   for (let i = 0; i < len; i += 3) {
@@ -299,32 +474,85 @@ function _uint8ArrayToBase64(bytes: Uint8Array): string {
     const c4 = b3 & 63;
 
     if (i + 1 >= len) {
-      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + '==';
+      base64 += chars.charAt(c1) + chars.charAt(c2) + '==';
     } else if (i + 2 >= len) {
-      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + BASE64_CHARS.charAt(c3) + '=';
+      base64 += chars.charAt(c1) + chars.charAt(c2) + chars.charAt(c3) + '=';
     } else {
-      base64 += BASE64_CHARS.charAt(c1) + BASE64_CHARS.charAt(c2) + BASE64_CHARS.charAt(c3) + BASE64_CHARS.charAt(c4);
+      base64 += chars.charAt(c1) + chars.charAt(c2) + chars.charAt(c3) + chars.charAt(c4);
     }
   }
   return base64;
 }
 
+function _base64ToArrayBuffer(base64: string): ArrayBuffer {
+  const base64Data = base64.replace(/^data:image\/\w+;base64,/, '').trim();
+  const binaryString = Platform.OS === 'web' && typeof window !== 'undefined' && window.atob
+    ? window.atob(base64Data)
+    : _atobPolyfill(base64Data);
+
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function _uint8ArrayToBase64(bytes: Uint8Array): string {
+  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.btoa) {
+    let binary = '';
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    return window.btoa(binary);
+  }
+  return _btoaPolyfill(bytes);
+}
+
+// 🚀 יצירת תמונת PNG שקופה מטקסט (Web)
+async function renderTextToPngBase64(text: string, fontSize: number = 15): Promise<{ base64Png: string; width: number; height: number }> {
+  if (Platform.OS === 'web' && typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return { base64Png: '', width: 0, height: 0 };
+
+    const dpiScale = 3;
+    const fontStyle = `bold ${fontSize}px Arial, sans-serif`;
+    ctx.font = fontStyle;
+
+    const textMetrics = ctx.measureText(text);
+    const displayWidth = Math.ceil(textMetrics.width) + 4;
+    const displayHeight = Math.ceil(fontSize * 1.3);
+
+    canvas.width = displayWidth * dpiScale;
+    canvas.height = displayHeight * dpiScale;
+    ctx.scale(dpiScale, dpiScale);
+
+    ctx.font = fontStyle;
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(text, 1, 0);
+
+    return { base64Png: canvas.toDataURL('image/png'), width: displayWidth, height: displayHeight };
+  }
+  return { base64Png: '', width: 0, height: 0 };
+}
+
 export default function PdfEditorScreen() {
   const { width: windowWidth } = useWindowDimensions();
-  const BASE_CONTAINER_WIDTH = Math.min(windowWidth - 24, 600);
+  const CONTAINER_WIDTH = Math.min(windowWidth - 24, 600);
 
-  // 🔎 זום דינמי למסמך
-  const [zoomScale, setZoomScale] = useState<number>(1.0);
-  const CONTAINER_WIDTH = BASE_CONTAINER_WIDTH * zoomScale;
-
-  // 🔤 גודל פונט ברירת מחדל לטקסט חדש
   const [defaultFontSize, setDefaultFontSize] = useState<number>(15);
-
-  // 🔒 נעילת גלילת הרקע בזמן גרירת אלמנט
   const [isScrollEnabled, setIsScrollEnabled] = useState<boolean>(true);
 
-  const [lang, setLang] = useState<Language>('he');
-  const t = I18N[lang];
+  // 🔎 זכוכית מגדלת
+  const [magnifierPos, setMagnifierPos] = useState<{ x: number; y: number } | null>(null);
+  const [magnifierScale, setMagnifierScale] = useState<number>(2.0);
+
+  // 🌐 סנכרון שפה גלובלי
+  const { lang, setLang } = useLanguage();
+  const t = I18N[lang] || I18N.en;
 
   const [pdfUri, setPdfUri] = useState<string | null>(null);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
@@ -336,15 +564,24 @@ export default function PdfEditorScreen() {
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
-  // ✍️ מודאל הזנת טקסט
   const [activeInput, setActiveInput] = useState<{ x: number; y: number } | null>(null);
   const [currentText, setCurrentText] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // 👤 אזור אישי ועריכת שם
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editingFullName, setEditingFullName] = useState('');
+
+  // 🖋️ חתימה במובייל ו-Web
   const [showSignatureModal, setShowSignatureModal] = useState(false);
   const [signatureClickPos, setSignatureClickPos] = useState<{ x: number; y: number } | null>(null);
+  const [mobileSignatureDataUrl, setMobileSignatureDataUrl] = useState<string | null>(null);
   const signatureCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const isDrawingSignature = useRef(false);
+  const mobileSignatureWebViewRef = useRef<WebView | null>(null);
+
+  // 📄 מנוע Text-to-Image למובייל
+  const [mobileTextToConvert, setMobileTextToConvert] = useState<{ id: string; text: string; fontSize: number } | null>(null);
+  const mobileTextCanvasWebViewRef = useRef<WebView | null>(null);
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -358,7 +595,7 @@ export default function PdfEditorScreen() {
   const [userAlreadyExistsError, setUserAlreadyExistsError] = useState(false);
 
   const [showAdModal, setShowAdModal] = useState(false);
-  const [adTitle, setAdTitle] = useState('📢 פרסומת חסות');
+  const [adTitle, setAdTitle] = useState('📢 Sponsored Ad');
   const [adMessage, setAdMessage] = useState('');
   const [adTimer, setAdTimer] = useState(10);
   const [isAdFinished, setIsAdFinished] = useState(false);
@@ -368,12 +605,44 @@ export default function PdfEditorScreen() {
   const [previewPdfBytes, setPreviewPdfBytes] = useState<Uint8Array | null>(null);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const webMagnifierCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   const containerHeight = pdfDimensions
     ? CONTAINER_WIDTH / pdfDimensions.aspectRatio
     : CONTAINER_WIDTH * 1.41;
 
   const selectedElement = elements.find((el) => el.id === selectedElementId);
+
+  const magnifierPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => activeTool === 'zoom',
+      onMoveShouldSetPanResponder: () => activeTool === 'zoom',
+      onPanResponderGrant: (evt) => {
+        setIsScrollEnabled(false);
+        const { locationX, locationY } = evt.nativeEvent;
+        setMagnifierPos({ x: locationX, y: locationY });
+      },
+      onPanResponderMove: (evt) => {
+        const { locationX, locationY } = evt.nativeEvent;
+        setMagnifierPos({ x: locationX, y: locationY });
+      },
+      onPanResponderRelease: () => {
+        setIsScrollEnabled(true);
+      },
+      onPanResponderTerminate: () => {
+        setIsScrollEnabled(true);
+      },
+    })
+  ).current;
+
+  useEffect(() => {
+    if (activeTool === 'zoom') {
+      setIsScrollEnabled(false);
+    } else {
+      setIsScrollEnabled(true);
+      setMagnifierPos(null);
+    }
+  }, [activeTool]);
 
   useEffect(() => {
     let interval: any = null;
@@ -395,6 +664,46 @@ export default function PdfEditorScreen() {
       renderPdfPageToCanvas(pdfBytes, canvasRef.current, CONTAINER_WIDTH, currentPageIndex + 1);
     }
   }, [pdfBytes, pdfDimensions, currentPageIndex, CONTAINER_WIDTH]);
+
+  // 🔍 זום-אין חרד ומוגדל בזכוכית המגדלת ב-Web
+  useEffect(() => {
+    const MAG_W = Math.min(CONTAINER_WIDTH - 20, 260);
+    const MAG_H = 100;
+
+    if (
+      Platform.OS === 'web' &&
+      activeTool === 'zoom' &&
+      magnifierPos &&
+      canvasRef.current &&
+      webMagnifierCanvasRef.current
+    ) {
+      const mainCanvas = canvasRef.current;
+      const magCanvas = webMagnifierCanvasRef.current;
+      const ctx = magCanvas.getContext('2d');
+
+      if (ctx && mainCanvas.width > 0) {
+        magCanvas.width = MAG_W;
+        magCanvas.height = MAG_H;
+
+        const scaleRatioX = mainCanvas.width / CONTAINER_WIDTH;
+        const scaleRatioY = mainCanvas.height / containerHeight;
+
+        const sampleW = MAG_W / magnifierScale;
+        const sampleH = MAG_H / magnifierScale;
+
+        const sampleX = magnifierPos.x - sampleW / 2;
+        const sampleY = magnifierPos.y - sampleH / 2;
+
+        const sx = Math.max(0, Math.min(CONTAINER_WIDTH - sampleW, sampleX)) * scaleRatioX;
+        const sy = Math.max(0, Math.min(containerHeight - sampleH, sampleY)) * scaleRatioY;
+        const sw = sampleW * scaleRatioX;
+        const sh = sampleH * scaleRatioY;
+
+        ctx.clearRect(0, 0, MAG_W, MAG_H);
+        ctx.drawImage(mainCanvas, sx, sy, sw, sh, 0, 0, MAG_W, MAG_H);
+      }
+    }
+  }, [magnifierPos, magnifierScale, activeTool, CONTAINER_WIDTH, containerHeight]);
 
   const initSignatureCanvas = (canvas: HTMLCanvasElement | null) => {
     if (!canvas) return;
@@ -445,17 +754,36 @@ export default function PdfEditorScreen() {
   };
 
   const clearSignatureCanvas = () => {
-    if (signatureCanvasRef.current) {
-      const ctx = signatureCanvasRef.current.getContext('2d');
-      if (ctx) {
-        ctx.clearRect(0, 0, signatureCanvasRef.current.width, signatureCanvasRef.current.height);
+    if (Platform.OS === 'web') {
+      if (signatureCanvasRef.current) {
+        const ctx = signatureCanvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.clearRect(0, 0, signatureCanvasRef.current.width, signatureCanvasRef.current.height);
+        }
       }
+    } else {
+      mobileSignatureWebViewRef.current?.injectJavaScript("window.postMessage('clear', '*'); true;");
+      setMobileSignatureDataUrl(null);
     }
   };
 
   const saveSignatureAndPlace = () => {
-    if (!signatureCanvasRef.current || !signatureClickPos) return;
-    const dataUrl = signatureCanvasRef.current.toDataURL('image/png');
+    if (!signatureClickPos) return;
+
+    let dataUrl: string | null = null;
+    if (Platform.OS === 'web') {
+      if (signatureCanvasRef.current) {
+        dataUrl = signatureCanvasRef.current.toDataURL('image/png');
+      }
+    } else {
+      dataUrl = mobileSignatureDataUrl;
+    }
+
+    if (!dataUrl) {
+      if (Platform.OS === 'web') alert(t.drawSignaturePrompt);
+      else Alert.alert(t.emptySignatureTitle, t.drawSignaturePrompt);
+      return;
+    }
 
     const newElement: EditorElement = {
       id: Date.now().toString(),
@@ -463,8 +791,8 @@ export default function PdfEditorScreen() {
       imageUri: dataUrl,
       x: Math.max(0, signatureClickPos.x - 60),
       y: Math.max(0, signatureClickPos.y - 30),
-      width: 120,
-      height: 60,
+      width: 140,
+      height: 70,
       fontSize: defaultFontSize,
       pageIndex: currentPageIndex,
     };
@@ -473,20 +801,21 @@ export default function PdfEditorScreen() {
     setSelectedElementId(newElement.id);
     setShowSignatureModal(false);
     setSignatureClickPos(null);
+    setMobileSignatureDataUrl(null);
   };
 
   const handlePageChange = (newIndex: number) => {
     if (!currentUser && newIndex > 0) {
       if (Platform.OS === 'web') {
-        alert('משתמשים אורחים יכולים לערוך את עמוד 1 בלבד. הרשם בחינם כדי לערוך את כל עמודי הקובץ!');
+        alert(t.guestLimitAlert);
         setShowAuthModal(true);
       } else {
         Alert.alert(
-          'מגבלת אורח 🔒',
-          'משתמשים אורחים יכולים לערוך את עמוד 1 בלבד. הרשם בחינם בשניות כדי לערוך את כל עמודי הקובץ!',
+          'Guest Limit 🔒',
+          t.guestLimitAlert,
           [
-            { text: 'סגור', style: 'cancel' },
-            { text: 'הרשם בחינם 🔑', onPress: () => setShowAuthModal(true) },
+            { text: t.close, style: 'cancel' },
+            { text: t.loginRegister, onPress: () => setShowAuthModal(true) },
           ]
         );
       }
@@ -518,12 +847,7 @@ export default function PdfEditorScreen() {
 
   const pickDocument = async () => {
     if (!currentUser) {
-      triggerAd(
-        5,
-        '⏳ טוען קובץ PDF...',
-        'אורח? הרשם בחינם כדי לבטל את זמן ההמתנה בהעלאת קבצים!',
-        'upload'
-      );
+      triggerAd(5, t.loadingFile, t.adNoticeUpload, 'upload');
     } else {
       processDocumentUpload();
     }
@@ -534,7 +858,7 @@ export default function PdfEditorScreen() {
       setLoading(true);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
-        copyToCacheDirectory: false,
+        copyToCacheDirectory: true,
       });
 
       if (result.canceled || !result.assets?.[0]) return;
@@ -544,19 +868,10 @@ export default function PdfEditorScreen() {
       setElements([]);
       setActiveInput(null);
       setSelectedElementId(null);
-      setZoomScale(1.0);
+      setMagnifierPos(null);
 
-      let bytes: ArrayBuffer;
-
-      if (Platform.OS === 'web') {
-        const res = await fetch(uri);
-        bytes = await res.arrayBuffer();
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        bytes = _base64ToArrayBuffer(base64);
-      }
+      const response = await fetch(uri);
+      const bytes = await response.arrayBuffer();
 
       setPdfBytes(bytes);
 
@@ -576,7 +891,7 @@ export default function PdfEditorScreen() {
       });
     } catch (err: any) {
       console.error('Upload Error:', err);
-      Alert.alert('שגיאה בטעינת הקובץ', err?.message || 'לא ניתן לקרוא את קובץ ה-PDF שנבחר.');
+      Alert.alert(t.uploadErrorTitle, err?.message || t.uploadErrorDesc);
     } finally {
       setLoading(false);
     }
@@ -586,12 +901,7 @@ export default function PdfEditorScreen() {
     if (!pdfBytes) return;
 
     if (!currentUser) {
-      triggerAd(
-        10,
-        '👁️ מכין תצוגה מקדימה...',
-        'אורחים צופים בפרסומת קצרה. הרשמה בחינם תפתח תצוגה מקדימה מיידית!',
-        'preview'
-      );
+      triggerAd(10, t.previewTitle, t.adNoticePreview, 'preview');
     } else {
       executePreviewProcess();
     }
@@ -606,7 +916,7 @@ export default function PdfEditorScreen() {
       setPreviewPdfBytes(watermarkedPdfBytes);
       setShowPreviewModal(true);
     } catch (error: any) {
-      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה ביצירת תצוגה מקדימה');
+      Alert.alert(t.uploadErrorTitle, error?.message || 'Error creating preview');
     } finally {
       setLoading(false);
     }
@@ -626,15 +936,15 @@ export default function PdfEditorScreen() {
 
         if (!res.ok) {
           if (Platform.OS === 'web') {
-            alert(data.error || 'הגעת למכסת העריכות שלך.');
+            alert(data.error || t.quotaExceeded);
             setShowAuthModal(true);
           } else {
             Alert.alert(
-              'המכסה הסתיימה ⚠️',
-              data.error || 'הגעת למכסת העריכות שלך.',
+              t.uploadErrorTitle,
+              data.error || t.quotaExceeded,
               [
-                { text: 'סגור' },
-                { text: 'רכוש חבילת 10 עריכות ב-₪9.90 🎟️', onPress: () => setShowAuthModal(true) },
+                { text: t.close },
+                { text: t.buyPass, onPress: () => setShowAuthModal(true) },
               ]
             );
           }
@@ -650,10 +960,8 @@ export default function PdfEditorScreen() {
     } else {
       triggerAd(
         currentUser ? 8 : 20,
-        '💾 מכין קובץ להורדה...',
-        currentUser
-          ? 'משתמש חינם? צפה בפרסומת קצרה להורדה.'
-          : 'אורח יקר, צפה בפרסומת לפתיחת ההורדה. הרשמה חינמית תוריד את זמן ההמתנה!',
+        t.downloadTitle,
+        currentUser ? t.adNoticeDownloadUser : t.adNoticeDownloadGuest,
         'download'
       );
     }
@@ -686,12 +994,12 @@ export default function PdfEditorScreen() {
       }
 
       if (Platform.OS === 'web') {
-        alert('הקובץ הורד בהצלחה! 🎉');
+        alert(t.downloadSuccess);
       } else {
-        Alert.alert('הצלחה!', 'הקובץ הורד בהצלחה.');
+        Alert.alert(t.downloadSuccess, t.downloadSuccess);
       }
     } catch (error: any) {
-      Alert.alert('שגיאה', error?.message || 'אירעה שגיאה בהורדת הקובץ');
+      Alert.alert(t.uploadErrorTitle, error?.message || 'Error downloading file');
     } finally {
       setLoading(false);
     }
@@ -701,14 +1009,12 @@ export default function PdfEditorScreen() {
     setUserAlreadyExistsError(false);
 
     if (!authEmail || !authPassword) {
-      if (Platform.OS === 'web') alert('נא למלא מייל וסיסמה');
-      else Alert.alert('שגיאה', 'נא למלא מייל וסיסמה');
+      if (Platform.OS === 'web') alert('Fill email & password');
+      else Alert.alert('Error', 'Fill email & password');
       return;
     }
 
     if (authMode === 'register') {
-      const defaultName = authEmail.split('@')[0];
-      setAuthFullName(defaultName);
       setAuthStep(2);
     } else {
       setLoading(true);
@@ -719,20 +1025,23 @@ export default function PdfEditorScreen() {
           body: JSON.stringify({ email: authEmail, password: authPassword }),
         });
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'שגיאה בהתחברות');
+        if (!res.ok) throw new Error(data.error || 'Login error');
 
-        const displayName = data.user.fullName || data.user.full_name || data.user.email;
-        setCurrentUser(data.user);
+        const displayName = data.user.fullName || data.user.full_name || authFullName || data.user.email;
+        const userPreferredLang = data.user.preferredLanguage || 'en';
+
+        setCurrentUser({ ...data.user, fullName: displayName });
+        setLang(userPreferredLang);
         setShowAuthModal(false);
 
         if (Platform.OS === 'web') {
-          alert(`שלום ${displayName} 👋, ברוך הבא!`);
+          alert(`${t.welcome} ${displayName}`);
         } else {
-          Alert.alert('ברוך הבא! 👋', `שלום ${displayName}`);
+          Alert.alert(t.welcome, displayName);
         }
       } catch (err: any) {
-        if (Platform.OS === 'web') alert(err.message || 'שגיאה בהתחברות');
-        else Alert.alert('שגיאה בהתחברות', err.message);
+        if (Platform.OS === 'web') alert(err.message || 'Login error');
+        else Alert.alert('Error', err.message);
       } finally {
         setLoading(false);
       }
@@ -752,6 +1061,7 @@ export default function PdfEditorScreen() {
           password: authPassword,
           fullName: authFullName,
           plan: selectedPlan,
+          preferredLanguage: lang,
         }),
       });
 
@@ -764,36 +1074,42 @@ export default function PdfEditorScreen() {
         }
 
         if (Platform.OS === 'web') {
-          alert(data.error || 'שגיאה בהרשמה');
+          alert(data.error || 'Register error');
         } else {
-          Alert.alert('שגיאה', data.error || 'שגיאה בהרשמה');
+          Alert.alert('Error', data.error || 'Register error');
         }
         return;
       }
 
-      const displayName = data.user.fullName || data.user.full_name || authFullName || data.user.email;
-      setCurrentUser(data.user);
+      const displayName = authFullName.trim() || data.user.fullName || data.user.full_name || data.user.email;
+      setCurrentUser({ ...data.user, fullName: displayName });
       setShowAuthModal(false);
       setAuthStep(1);
 
       if (Platform.OS === 'web') {
-        alert(`ברוך הבא ${displayName}! 🎉 ההרשמה הושלמה.`);
+        alert(`${t.welcome} ${displayName}`);
       } else {
-        Alert.alert('ההרשמה הושלמה! 🎉', `ברוך הבא ${displayName}!`);
+        Alert.alert(t.welcome, displayName);
       }
     } catch (err: any) {
       console.error('Register fetch error:', err);
       if (Platform.OS === 'web') {
-        alert(err.message || 'שגיאה בהתחברות לשרת');
+        alert(err.message || 'Network error');
       } else {
-        Alert.alert('שגיאה', err.message || 'שגיאה בהתחברות לשרת');
+        Alert.alert('Error', err.message || 'Network error');
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // 🎯 פונקציה מרכזית ללחיצה על הקנבס
+  const handleSaveProfileName = () => {
+    if (!currentUser || !editingFullName.trim()) return;
+    setCurrentUser((prev) => prev ? { ...prev, fullName: editingFullName.trim() } : null);
+    if (Platform.OS === 'web') alert(t.done);
+    else Alert.alert(t.done, t.done);
+  };
+
   const handleCanvasClick = (clickX: number, clickY: number) => {
     if (selectedElementId) {
       setSelectedElementId(null);
@@ -802,10 +1118,18 @@ export default function PdfEditorScreen() {
 
     if (!pdfUri) return;
 
+    if (activeTool === 'zoom') {
+      setMagnifierPos({ x: clickX, y: clickY });
+      return;
+    }
+
+    setMagnifierPos(null);
+
     if (activeTool === 'text') {
       setActiveInput({ x: clickX, y: clickY });
     } else if (activeTool === 'signature') {
       setSignatureClickPos({ x: clickX, y: clickY });
+      setMobileSignatureDataUrl(null);
       setShowSignatureModal(true);
     } else {
       const newElement: EditorElement = {
@@ -831,23 +1155,47 @@ export default function PdfEditorScreen() {
     }
   };
 
-  const handleAddTextElement = () => {
+  const handleAddTextElement = async () => {
     if (!activeInput || !currentText.trim()) return;
 
-    const newElement: EditorElement = {
-      id: Date.now().toString(),
-      type: 'text',
-      text: currentText,
-      x: activeInput.x,
-      y: activeInput.y,
-      width: 120,
-      height: 20,
-      fontSize: defaultFontSize,
-      pageIndex: currentPageIndex,
-    };
+    const newId = Date.now().toString();
 
-    setElements((prev) => [...prev, newElement]);
-    setSelectedElementId(newElement.id);
+    if (Platform.OS === 'web') {
+      const res = await renderTextToPngBase64(currentText, defaultFontSize);
+      const newElement: EditorElement = {
+        id: newId,
+        type: 'text',
+        text: currentText,
+        imageUri: res.base64Png || undefined,
+        x: activeInput.x,
+        y: activeInput.y,
+        width: Math.max(60, res.width || 120),
+        height: Math.max(20, res.height || 20),
+        fontSize: defaultFontSize,
+        pageIndex: currentPageIndex,
+      };
+      setElements((prev) => [...prev, newElement]);
+      setSelectedElementId(newElement.id);
+    } else {
+      // 🚀 הוספה מיידית למסך במובייל (ללא עיכוב)
+      const newElement: EditorElement = {
+        id: newId,
+        type: 'text',
+        text: currentText,
+        x: activeInput.x,
+        y: activeInput.y,
+        width: Math.max(80, currentText.length * 10),
+        height: 25,
+        fontSize: defaultFontSize,
+        pageIndex: currentPageIndex,
+      };
+      setElements((prev) => [...prev, newElement]);
+      setSelectedElementId(newElement.id);
+
+      // שליחת הטקסט ברקע למדידת רוחב וגובה מדויקים לצורך שמירה ב-PDF
+      setMobileTextToConvert({ id: newId, text: currentText, fontSize: defaultFontSize });
+    }
+
     setCurrentText('');
     setActiveInput(null);
   };
@@ -866,93 +1214,93 @@ export default function PdfEditorScreen() {
   const buildModifiedPdfBytes = async (isPreviewMode: boolean = false): Promise<Uint8Array | null> => {
     if (!pdfBytes || !pdfDimensions) return null;
 
-    const { PDFDocument, rgb } = await getPdfLib();
-    const pdfDoc = await PDFDocument.load(pdfBytes.slice(0));
-    const pages = pdfDoc.getPages();
+    try {
+      const { PDFDocument, rgb } = await getPdfLib();
+      const pdfDoc = await PDFDocument.load(pdfBytes.slice(0));
+      const pages = pdfDoc.getPages();
 
-    const scaleX = pdfDimensions.width / CONTAINER_WIDTH;
-    const scaleY = pdfDimensions.height / containerHeight;
+      const currentHeight = pdfDimensions.height;
+      const currentWidth = pdfDimensions.width;
+      const scaleX = currentWidth / CONTAINER_WIDTH;
+      const scaleY = currentHeight / containerHeight;
 
-    for (const el of elements) {
-      const targetPage = pages[el.pageIndex] || pages[0];
+      for (const el of elements) {
+        try {
+          const targetPage = pages[el.pageIndex] || pages[0];
 
-      if (el.type === 'text' && el.text) {
-        if (Platform.OS === 'web') {
-          const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
-          if (base64Png) {
-            const imageBytes = _base64ToArrayBuffer(base64Png.replace(/^data:image\/png;base64,/, ''));
+          if (el.type === 'text' && el.text) {
+            let pngUri = el.imageUri;
+            if (!pngUri) {
+              const res = await renderTextToPngBase64(el.text, el.fontSize);
+              pngUri = res.base64Png;
+            }
+
+            if (pngUri) {
+              const imageBytes = _base64ToArrayBuffer(pngUri);
+              const pngImage = await pdfDoc.embedPng(imageBytes);
+              const finalImgWidth = pngImage.width * (scaleX / 3);
+              const finalImgHeight = pngImage.height * (scaleY / 3);
+              const finalPdfX = el.x * scaleX;
+              const finalPdfY = currentHeight - (el.y * scaleY) - finalImgHeight;
+
+              targetPage.drawImage(pngImage, {
+                x: Math.max(0, finalPdfX),
+                y: Math.max(0, finalPdfY),
+                width: finalImgWidth,
+                height: finalImgHeight,
+              });
+            }
+          } else if (el.type === 'signature' && el.imageUri) {
+            const imageBytes = _base64ToArrayBuffer(el.imageUri);
             const pngImage = await pdfDoc.embedPng(imageBytes);
-            const finalImgWidth = imgW * scaleX;
-            const finalImgHeight = imgH * scaleY;
+
+            const finalWidth = el.width * scaleX;
+            const finalHeight = el.height * scaleY;
+
             const finalPdfX = el.x * scaleX;
-            const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight;
+            const finalPdfY = currentHeight - (el.y * scaleY) - finalHeight;
 
             targetPage.drawImage(pngImage, {
               x: Math.max(0, finalPdfX),
-              y: finalPdfY,
-              width: finalImgWidth,
-              height: finalImgHeight,
-            });
-          }
-        } else {
-          // 🚀 הוספת טקסט חסינה במובייל
-          const finalPdfX = el.x * scaleX;
-          const finalPdfY = pdfDimensions.height - (el.y * scaleY) - (el.fontSize * scaleY);
-          try {
-            targetPage.drawText(el.text, {
-              x: Math.max(0, finalPdfX),
               y: Math.max(0, finalPdfY),
-              size: el.fontSize * scaleY,
-              color: rgb(0, 0, 0),
+              width: finalWidth,
+              height: finalHeight,
             });
-          } catch (fontErr) {
-            console.warn('Text draw warning:', fontErr);
+          } else if (el.type === 'highlight' || el.type === 'redact') {
+            const finalWidth = el.width * scaleX;
+            const finalHeight = el.height * scaleY;
+            const finalPdfX = el.x * scaleX;
+            const finalPdfY = currentHeight - (el.y * scaleY) - finalHeight;
+
+            if (el.type === 'redact') {
+              targetPage.drawRectangle({
+                x: Math.max(0, finalPdfX),
+                y: Math.max(0, finalPdfY),
+                width: finalWidth,
+                height: finalHeight,
+                color: rgb(0, 0, 0),
+              });
+            } else {
+              targetPage.drawRectangle({
+                x: Math.max(0, finalPdfX),
+                y: Math.max(0, finalPdfY),
+                width: finalWidth,
+                height: finalHeight,
+                color: rgb(1, 0.92, 0.2),
+                opacity: 0.5,
+              });
+            }
           }
-        }
-      } else if (el.type === 'signature' && el.imageUri) {
-        const imageBytes = _base64ToArrayBuffer(el.imageUri.replace(/^data:image\/png;base64,/, ''));
-        const pngImage = await pdfDoc.embedPng(imageBytes);
-
-        const finalWidth = el.width * scaleX;
-        const finalHeight = el.height * scaleY;
-
-        const finalPdfX = el.x * scaleX;
-        const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
-
-        targetPage.drawImage(pngImage, {
-          x: Math.max(0, finalPdfX),
-          y: finalPdfY,
-          width: finalWidth,
-          height: finalHeight,
-        });
-      } else if (el.type === 'highlight' || el.type === 'redact') {
-        const finalWidth = el.width * scaleX;
-        const finalHeight = el.height * scaleY;
-        const finalPdfX = el.x * scaleX;
-        const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
-
-        if (el.type === 'redact') {
-          targetPage.drawRectangle({
-            x: Math.max(0, finalPdfX),
-            y: finalPdfY,
-            width: finalWidth,
-            height: finalHeight,
-            color: rgb(0, 0, 0),
-          });
-        } else {
-          targetPage.drawRectangle({
-            x: Math.max(0, finalPdfX),
-            y: finalPdfY,
-            width: finalWidth,
-            height: finalHeight,
-            color: rgb(1, 0.92, 0.2),
-            opacity: 0.5,
-          });
+        } catch (elErr) {
+          console.error('Error adding element to PDF:', elErr);
         }
       }
-    }
 
-    return await pdfDoc.save();
+      return await pdfDoc.save();
+    } catch (err) {
+      console.error('Error building modified PDF:', err);
+      return null;
+    }
   };
 
   const renderPaginationBar = () => {
@@ -985,40 +1333,124 @@ export default function PdfEditorScreen() {
     );
   };
 
+  const MAGNIFIER_WIDTH = Math.min(CONTAINER_WIDTH - 20, 260);
+  const MAGNIFIER_HEIGHT = 100;
+
   return (
     <View style={styles.mainContainer}>
       <StatusBar backgroundColor="#0f172a" barStyle="light-content" translucent={false} />
 
+      {/* 📄 WebView נסתר למדידת טקסט והמרתו ל-PNG במובייל */}
+      {Platform.OS !== 'web' && (
+        <View style={{ width: 0, height: 0, opacity: 0, overflow: 'hidden', position: 'absolute' }}>
+          <WebView
+            ref={mobileTextCanvasWebViewRef}
+            originWhitelist={['*']}
+            onMessage={(event) => {
+              try {
+                const data = JSON.parse(event.nativeEvent.data);
+                if (data && data.base64Png && data.id) {
+                  setElements((prev) =>
+                    prev.map((el) =>
+                      el.id === data.id
+                        ? { ...el, imageUri: data.base64Png, width: Math.max(60, data.width || 120), height: Math.max(20, data.height || 20) }
+                        : el
+                    )
+                  );
+                  setMobileTextToConvert(null);
+                }
+              } catch (e) {
+                console.error('Error parsing mobile text PNG message:', e);
+              }
+            }}
+            source={{
+              html: `
+                <!DOCTYPE html>
+                <html>
+                  <head>
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                  </head>
+                  <body>
+                    <canvas id="tc"></canvas>
+                    <script>
+                      window.addEventListener('message', function(e) {
+                        try {
+                          const data = JSON.parse(e.data);
+                          if (data && data.text) {
+                            const canvas = document.getElementById('tc');
+                            const ctx = canvas.getContext('2d');
+                            const dpi = 3;
+                            const fontStyle = 'bold ' + data.fontSize + 'px Arial, sans-serif';
+                            ctx.font = fontStyle;
+                            const metrics = ctx.measureText(data.text);
+                            const w = Math.ceil(metrics.width) + 6;
+                            const h = Math.ceil(data.fontSize * 1.3);
+                            canvas.width = w * dpi;
+                            canvas.height = h * dpi;
+                            ctx.scale(dpi, dpi);
+                            ctx.font = fontStyle;
+                            ctx.textBaseline = 'top';
+                            ctx.fillStyle = '#000000';
+                            ctx.fillText(data.text, 2, 0);
+                            window.ReactNativeWebView.postMessage(JSON.stringify({
+                              id: data.id,
+                              base64Png: canvas.toDataURL('image/png'),
+                              width: w,
+                              height: h
+                            }));
+                          }
+                        } catch(err) {}
+                      });
+                    </script>
+                  </body>
+                </html>
+              `
+            }}
+            onLoadEnd={() => {
+              if (mobileTextToConvert) {
+                mobileTextCanvasWebViewRef.current?.injectJavaScript(
+                  `window.postMessage(JSON.stringify(${JSON.stringify(mobileTextToConvert)}), '*'); true;`
+                );
+              }
+            }}
+          />
+        </View>
+      )}
+
       <SafeAreaView style={styles.safeArea}>
-        {/* 🔒 ScrollView ראשי עם שליטה מלאה בנעילת גלילה */}
         <ScrollView
           scrollEnabled={isScrollEnabled}
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-          {/* 🌟 Header */}
-          <View style={[styles.headerBar, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+          {/* Header - סרגל השפה מופיע רק למשתמשים אורחים שאינם מחוברים */}
+          <View style={[styles.headerBar, { maxWidth: CONTAINER_WIDTH }]}>
             <DocFlowLogo />
 
-            <View style={styles.langBar}>
-              <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עב</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>EN</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>عرب</Text></TouchableOpacity>
-              <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማ</Text></TouchableOpacity>
-            </View>
+            {!currentUser && (
+              <View style={styles.langBar}>
+                <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>EN</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עב</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>عرب</Text></TouchableOpacity>
+                <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማ</Text></TouchableOpacity>
+              </View>
+            )}
 
             {currentUser ? (
-              <View style={styles.userInfoBadge}>
+              <TouchableOpacity
+                style={styles.userInfoBadge}
+                onPress={() => {
+                  setEditingFullName(currentUser.fullName || currentUser.full_name || '');
+                  setShowProfileModal(true);
+                }}
+              >
                 <Text style={styles.userEmailText} numberOfLines={1}>
                   👤 {currentUser.fullName || currentUser.full_name || currentUser.email}
                 </Text>
                 <Text style={[styles.userPlanBadge, currentUser.plan !== 'free' && styles.paidPlanBadge]}>
                   {currentUser.plan.toUpperCase()}
                 </Text>
-                <TouchableOpacity onPress={() => setCurrentUser(null)}>
-                  <Text style={styles.logoutText}>{t.logout}</Text>
-                </TouchableOpacity>
-              </View>
+              </TouchableOpacity>
             ) : (
               <TouchableOpacity
                 style={styles.authBtn}
@@ -1033,17 +1465,15 @@ export default function PdfEditorScreen() {
             )}
           </View>
 
-          {/* 📢 באנר עליון למבקרים */}
           {!currentUser && (
-            <View style={[styles.topAdBannerSlot, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+            <View style={[styles.topAdBannerSlot, { maxWidth: CONTAINER_WIDTH }]}>
               <Text style={styles.adSlotLabel}>Sponsored</Text>
               <Text style={styles.topAdBannerText}>⚡ {t.guestNotice}</Text>
             </View>
           )}
 
-          {/* 🏠 Hero Section */}
           {!pdfUri ? (
-            <View style={[styles.heroLandingCard, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+            <View style={[styles.heroLandingCard, { maxWidth: CONTAINER_WIDTH }]}>
               <Text style={styles.heroTitle}>{t.heroTitle}</Text>
               <Text style={styles.heroSubtitle}>{t.heroSubtitle}</Text>
 
@@ -1072,56 +1502,86 @@ export default function PdfEditorScreen() {
               </View>
             </View>
           ) : (
-            /* 📝 אזור העריכה */
-            <View style={[styles.editorArea, { maxWidth: BASE_CONTAINER_WIDTH }]}>
+            <View style={[styles.editorArea, { maxWidth: CONTAINER_WIDTH }]}>
               <TouchableOpacity style={styles.changeFileBtn} onPress={pickDocument} disabled={loading}>
                 <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
               </TouchableOpacity>
 
-              {/* סרגל כלים רספונסיבי */}
+              {/* סרגל כלים ראשי */}
               <View style={styles.toolbarRow}>
                 <TouchableOpacity
                   style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
-                  onPress={() => setActiveTool('text')}
+                  onPress={() => {
+                    setActiveTool('text');
+                    setMagnifierPos(null);
+                  }}
                 >
                   <Text style={[styles.toolBtnText, activeTool === 'text' && styles.activeToolBtnText]}>{t.textTool}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.toolBtn, activeTool === 'signature' && styles.activeToolBtn]}
-                  onPress={() => setActiveTool('signature')}
+                  onPress={() => {
+                    setActiveTool('signature');
+                    setMagnifierPos(null);
+                  }}
                 >
                   <Text style={[styles.toolBtnText, activeTool === 'signature' && styles.activeToolBtnText]}>{t.signatureTool}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.toolBtn, activeTool === 'highlight' && styles.activeToolBtn]}
-                  onPress={() => setActiveTool('highlight')}
+                  onPress={() => {
+                    setActiveTool('highlight');
+                    setMagnifierPos(null);
+                  }}
                 >
                   <Text style={[styles.toolBtnText, activeTool === 'highlight' && styles.activeToolBtnText]}>{t.highlightTool}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.toolBtn, activeTool === 'redact' && styles.activeToolBtn]}
-                  onPress={() => setActiveTool('redact')}
+                  onPress={() => {
+                    setActiveTool('redact');
+                    setMagnifierPos(null);
+                  }}
                 >
                   <Text style={[styles.toolBtnText, activeTool === 'redact' && styles.activeToolBtnText]}>{t.redactTool}</Text>
                 </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.toolBtn, activeTool === 'zoom' && styles.activeToolBtn]}
+                  onPress={() => setActiveTool('zoom')}
+                >
+                  <Text style={[styles.toolBtnText, activeTool === 'zoom' && styles.activeToolBtnText]}>{t.zoomTool}</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* 🔍 סרגל בקרת זום + פונט ברירת מחדל */}
+              {/* בקרת זכוכית מגדלת רמת הגדלה + פונט ברירת מחדל */}
               <View style={styles.zoomControlRow}>
-                <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomScale((prev) => Math.max(0.5, prev - 0.2))}>
-                  <Text style={styles.zoomBtnText}>🔍 -</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.zoomResetBtn} onPress={() => setZoomScale(1.0)}>
-                  <Text style={styles.zoomResetText}>{Math.round(zoomScale * 100)}%</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomScale((prev) => Math.min(2.5, prev + 0.2))}>
-                  <Text style={styles.zoomBtnText}>🔍 +</Text>
+                <Text style={styles.zoomControlLabel}>{t.magnifierScaleLabel}</Text>
+
+                <TouchableOpacity
+                  style={[styles.zoomBtn, magnifierScale === 1.5 && styles.activeZoomBtn]}
+                  onPress={() => setMagnifierScale(1.5)}
+                >
+                  <Text style={[styles.zoomBtnText, magnifierScale === 1.5 && styles.activeZoomBtnText]}>x1.5</Text>
                 </TouchableOpacity>
 
-                {/* 🔤 בקרת פונט ברירת מחדל */}
+                <TouchableOpacity
+                  style={[styles.zoomBtn, magnifierScale === 2.0 && styles.activeZoomBtn]}
+                  onPress={() => setMagnifierScale(2.0)}
+                >
+                  <Text style={[styles.zoomBtnText, magnifierScale === 2.0 && styles.activeZoomBtnText]}>x2.0</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.zoomBtn, magnifierScale === 2.5 && styles.activeZoomBtn]}
+                  onPress={() => setMagnifierScale(2.5)}
+                >
+                  <Text style={[styles.zoomBtnText, magnifierScale === 2.5 && styles.activeZoomBtnText]}>x2.5</Text>
+                </TouchableOpacity>
+
                 <View style={styles.fontDefaultControl}>
                   <TouchableOpacity onPress={() => setDefaultFontSize((prev) => Math.max(10, prev - 2))}>
                     <Text style={styles.fontBtnText}>A-</Text>
@@ -1133,32 +1593,29 @@ export default function PdfEditorScreen() {
                 </View>
               </View>
 
-              {/* 🎯 סרגל ניהול ייעודי לאלמנט שנבחר (מחוץ למסמך - שומר על טקסט נקי!) */}
               {selectedElement && (
                 <View style={styles.selectedElementControlDock}>
                   <View style={styles.dockHeaderRow}>
                     <Text style={styles.dockTitle} numberOfLines={1}>
-                      {selectedElement.type === 'text' ? `✍️ "${selectedElement.text}"` : '🎯 אלמנט נבחר'}
+                      {selectedElement.type === 'text' ? `✍️ "${selectedElement.text}"` : t.selectedElement}
                     </Text>
                     <TouchableOpacity style={styles.dockCloseBtn} onPress={() => setSelectedElementId(null)}>
-                      <Text style={styles.dockCloseText}>✓ סיום</Text>
+                      <Text style={styles.dockCloseText}>{t.done}</Text>
                     </TouchableOpacity>
                   </View>
 
                   <View style={styles.dockControlsRow}>
-                    {/* חיצי מיקום */}
                     <View style={styles.dockGroup}>
-                      <Text style={styles.dockGroupLabel}>מיקום:</Text>
+                      <Text style={styles.dockGroupLabel}>{t.position}</Text>
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(0, -3)}><Text style={styles.nudgeText}>▲</Text></TouchableOpacity>
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(0, 3)}><Text style={styles.nudgeText}>▼</Text></TouchableOpacity>
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(-3, 0)}><Text style={styles.nudgeText}>◄</Text></TouchableOpacity>
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(3, 0)}><Text style={styles.nudgeText}>►</Text></TouchableOpacity>
                     </View>
 
-                    {/* שינוי פונט או רוחב */}
                     {selectedElement.type === 'text' ? (
                       <View style={styles.dockGroup}>
-                        <Text style={styles.dockGroupLabel}>פונט:</Text>
+                        <Text style={styles.dockGroupLabel}>{t.font}</Text>
                         <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { fontSize: Math.max(10, selectedElement.fontSize - 2) })}>
                           <Text style={styles.nudgeText}>A-</Text>
                         </TouchableOpacity>
@@ -1169,17 +1626,16 @@ export default function PdfEditorScreen() {
                       </View>
                     ) : (
                       <View style={styles.dockGroup}>
-                        <Text style={styles.dockGroupLabel}>רוחב:</Text>
+                        <Text style={styles.dockGroupLabel}>{t.width}</Text>
                         <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { width: Math.max(20, selectedElement.width - 15) })}>
-                          <Text style={styles.nudgeText}>צר-</Text>
+                          <Text style={styles.nudgeText}>-</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={styles.nudgeBtn} onPress={() => updateElementProps(selectedElement.id, { width: Math.min(400, selectedElement.width + 15) })}>
-                          <Text style={styles.nudgeText}>רחב+</Text>
+                          <Text style={styles.nudgeText}>+</Text>
                         </TouchableOpacity>
                       </View>
                     )}
 
-                    {/* מחיקה */}
                     <TouchableOpacity
                       style={styles.dockDeleteBtn}
                       onPress={() => {
@@ -1187,7 +1643,7 @@ export default function PdfEditorScreen() {
                         setSelectedElementId(null);
                       }}
                     >
-                      <Text style={styles.dockDeleteText}>🗑️ מחק</Text>
+                      <Text style={styles.dockDeleteText}>{t.delete}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1195,120 +1651,205 @@ export default function PdfEditorScreen() {
 
               {renderPaginationBar()}
 
-              {/* 📄 תצוגת הקובץ בגלילה אופקית לתמיכה בזום-אין (ננעלת בזמן גרירה) */}
-              <ScrollView
-                horizontal
-                scrollEnabled={isScrollEnabled}
-                showsHorizontalScrollIndicator={true}
-                contentContainerStyle={{ alignItems: 'center' }}
-                style={{ width: '100%' }}
-              >
-                <View style={[styles.pdfViewerContainer, { width: CONTAINER_WIDTH, height: containerHeight }]}>
-                  {Platform.OS === 'web' ? (
-                    <canvas
-                      ref={canvasRef}
-                      style={{ width: CONTAINER_WIDTH, height: containerHeight, display: 'block' }}
-                    />
-                  ) : (
-                    pdfBytes && (
-                      <WebView
-                        originWhitelist={['*']}
-                        onMessage={(event) => {
-                          try {
-                            const data = JSON.parse(event.nativeEvent.data);
-                            if (data.type === 'click') {
-                              handleCanvasClick(data.x, data.y);
-                            }
-                          } catch (e) {
-                            console.error('WebView message error:', e);
+              {/* תצוגת הקובץ */}
+              <View style={[styles.pdfViewerContainer, { width: CONTAINER_WIDTH, height: containerHeight }]}>
+                {Platform.OS === 'web' ? (
+                  <canvas
+                    ref={canvasRef}
+                    style={{ width: CONTAINER_WIDTH, height: containerHeight, display: 'block' }}
+                  />
+                ) : (
+                  pdfBytes && (
+                    <WebView
+                      originWhitelist={['*']}
+                      onMessage={(event) => {
+                        try {
+                          const data = JSON.parse(event.nativeEvent.data);
+                          if (data.type === 'click') {
+                            handleCanvasClick(data.x, data.y);
                           }
-                        }}
-                        source={{
-                          html: `
-                            <!DOCTYPE html>
-                            <html>
-                              <head>
-                                <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
-                                <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-                                <style>
-                                  * { box-sizing: border-box; }
-                                  html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; display: flex; justify-content: center; align-items: center; }
-                                  #canvas-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
-                                  canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
-                                </style>
-                              </head>
-                              <body>
-                                <div id="canvas-container">
-                                  <canvas id="pdf-canvas"></canvas>
-                                </div>
-                                <script>
-                                  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-                                  const base64Data = "${_uint8ArrayToBase64(new Uint8Array(pdfBytes))}";
-                                  const raw = window.atob(base64Data);
-                                  const rawLength = raw.length;
-                                  const array = new Uint8Array(new ArrayBuffer(rawLength));
-                                  for(let i = 0; i < rawLength; i++) {
-                                    array[i] = raw.charCodeAt(i);
+                        } catch (e) {
+                          console.error('WebView message error:', e);
+                        }
+                      }}
+                      source={{
+                        html: `
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=yes">
+                              <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                              <style>
+                                * { box-sizing: border-box; }
+                                html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+                                #canvas-container { width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; position: relative; }
+                                canvas { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+                              </style>
+                            </head>
+                            <body>
+                              <div id="canvas-container">
+                                <canvas id="pdf-canvas"></canvas>
+                              </div>
+                              <script>
+                                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                                const base64Data = "${_uint8ArrayToBase64(new Uint8Array(pdfBytes))}";
+                                const raw = window.atob(base64Data);
+                                const rawLength = raw.length;
+                                const array = new Uint8Array(new ArrayBuffer(rawLength));
+                                for(let i = 0; i < rawLength; i++) {
+                                  array[i] = raw.charCodeAt(i);
+                                }
+
+                                pdfjsLib.getDocument({ data: array }).promise.then(pdf => {
+                                  pdf.getPage(${currentPageIndex + 1}).then(page => {
+                                    const canvas = document.getElementById('pdf-canvas');
+                                    const context = canvas.getContext('2d');
+                                    const viewport = page.getViewport({ scale: 1.0 });
+
+                                    const scale = (${CONTAINER_WIDTH} / viewport.width);
+                                    const scaledViewport = page.getViewport({ scale: scale * 2.0 });
+
+                                    canvas.width = scaledViewport.width;
+                                    canvas.height = scaledViewport.height;
+                                    page.render({ canvasContext: context, viewport: scaledViewport });
+                                  });
+                                });
+
+                                document.getElementById('canvas-container').addEventListener('click', function(e) {
+                                  const rect = this.getBoundingClientRect();
+                                  const x = e.clientX - rect.left;
+                                  const y = e.clientY - rect.top;
+                                  if (window.ReactNativeWebView) {
+                                    window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'click', x: x, y: y }));
                                   }
+                                });
+                              </script>
+                            </body>
+                          </html>
+                        `
+                      }}
+                      style={{ width: CONTAINER_WIDTH, height: containerHeight, backgroundColor: 'transparent' }}
+                      scrollEnabled={false}
+                    />
+                  )
+                )}
 
-                                  pdfjsLib.getDocument({ data: array }).promise.then(pdf => {
-                                    pdf.getPage(${currentPageIndex + 1}).then(page => {
-                                      const canvas = document.getElementById('pdf-canvas');
-                                      const context = canvas.getContext('2d');
-                                      const viewport = page.getViewport({ scale: 1.0 });
+                {/* שכבת לכידת מגע וגרירה רציפה של זכוכית המגדלת במובייל */}
+                {activeTool === 'zoom' && Platform.OS !== 'web' && (
+                  <View
+                    {...magnifierPanResponder.panHandlers}
+                    style={StyleSheet.absoluteFillObject}
+                  />
+                )}
 
-                                      const scale = (${CONTAINER_WIDTH} / viewport.width);
-                                      const scaledViewport = page.getViewport({ scale: scale * 2.0 });
+                {Platform.OS === 'web' && (
+                  <Pressable
+                    style={StyleSheet.absoluteFillObject}
+                    onPress={handleContainerPress}
+                    onMouseMove={(e) => {
+                      if (activeTool === 'zoom') {
+                        const rect = e.currentTarget.getBoundingClientRect();
+                        setMagnifierPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+                      }
+                    }}
+                  />
+                )}
 
-                                      canvas.width = scaledViewport.width;
-                                      canvas.height = scaledViewport.height;
-                                      page.render({ canvasContext: context, viewport: scaledViewport });
-                                    });
-                                  });
+                {/* אלמנטים נגררים */}
+                {elements
+                  .filter((el) => el.pageIndex === currentPageIndex)
+                  .map((el) => (
+                    <DraggableItem
+                      key={el.id}
+                      element={el}
+                      isSelected={selectedElementId === el.id}
+                      onSelect={() => setSelectedElementId(el.id)}
+                      containerBounds={{ width: CONTAINER_WIDTH, height: containerHeight }}
+                      onUpdatePos={(id, x, y) => {
+                        setElements((prev) => prev.map((item) => (item.id === id ? { ...item, x, y } : item)));
+                      }}
+                      onDragStart={() => setIsScrollEnabled(false)}
+                      onDragEnd={() => setIsScrollEnabled(true)}
+                    />
+                  ))}
 
-                                  document.getElementById('canvas-container').addEventListener('click', function(e) {
-                                    const rect = this.getBoundingClientRect();
-                                    const x = e.clientX - rect.left;
-                                    const y = e.clientY - rect.top;
-                                    if (window.ReactNativeWebView) {
-                                      window.ReactNativeWebView.postMessage(JSON.stringify({ type: 'click', x: x, y: y }));
+                {/* מלבן זכוכית מגדלת מרחף */}
+                {activeTool === 'zoom' && magnifierPos && pdfBytes && (
+                  <View
+                    pointerEvents="none"
+                    style={[
+                      styles.magnifierBox,
+                      {
+                        width: MAGNIFIER_WIDTH,
+                        height: MAGNIFIER_HEIGHT,
+                        left: Math.max(10, Math.min(CONTAINER_WIDTH - MAGNIFIER_WIDTH - 10, magnifierPos.x - MAGNIFIER_WIDTH / 2)),
+                        top: Math.max(10, magnifierPos.y - MAGNIFIER_HEIGHT - 20),
+                      },
+                    ]}
+                  >
+                    <View style={[styles.magnifierInnerBox, { width: MAGNIFIER_WIDTH, height: MAGNIFIER_HEIGHT }]}>
+                      {Platform.OS === 'web' ? (
+                        <canvas
+                          ref={webMagnifierCanvasRef}
+                          style={{ width: MAGNIFIER_WIDTH, height: MAGNIFIER_HEIGHT, display: 'block' }}
+                        />
+                      ) : (
+                        <WebView
+                          originWhitelist={['*']}
+                          source={{
+                            html: `
+                              <!DOCTYPE html>
+                              <html>
+                                <head>
+                                  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                                  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+                                  <style>
+                                    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; }
+                                    #zoom-canvas {
+                                      position: absolute;
+                                      left: -${magnifierPos.x * magnifierScale - MAGNIFIER_WIDTH / 2}px;
+                                      top: -${magnifierPos.y * magnifierScale - MAGNIFIER_HEIGHT / 2}px;
                                     }
-                                  });
-                                </script>
-                              </body>
-                            </html>
-                          `
-                        }}
-                        style={{ width: CONTAINER_WIDTH, height: containerHeight, backgroundColor: 'transparent' }}
-                        scrollEnabled={false}
-                      />
-                    )
-                  )}
+                                  </style>
+                                </head>
+                                <body>
+                                  <canvas id="zoom-canvas"></canvas>
+                                  <script>
+                                    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+                                    const base64Data = "${_uint8ArrayToBase64(new Uint8Array(pdfBytes))}";
+                                    const raw = window.atob(base64Data);
+                                    const rawLength = raw.length;
+                                    const array = new Uint8Array(new ArrayBuffer(rawLength));
+                                    for(let i = 0; i < rawLength; i++) {
+                                      array[i] = raw.charCodeAt(i);
+                                    }
 
-                  {/* שכבת לחיצה ל-Web בלבד */}
-                  {Platform.OS === 'web' && (
-                    <Pressable style={StyleSheet.absoluteFillObject} onPress={handleContainerPress} />
-                  )}
+                                    pdfjsLib.getDocument({ data: array }).promise.then(pdf => {
+                                      pdf.getPage(${currentPageIndex + 1}).then(page => {
+                                        const canvas = document.getElementById('zoom-canvas');
+                                        const context = canvas.getContext('2d');
+                                        const viewport = page.getViewport({ scale: 1.0 });
+                                        const baseScale = (${CONTAINER_WIDTH} / viewport.width);
+                                        const scaledViewport = page.getViewport({ scale: baseScale * ${magnifierScale} });
 
-                  {/* 🎨 אלמנטים נגררים נקיים בלבד (מסגרת עדינה ללא הסתרות!) */}
-                  {elements
-                    .filter((el) => el.pageIndex === currentPageIndex)
-                    .map((el) => (
-                      <DraggableItem
-                        key={el.id}
-                        element={el}
-                        isSelected={selectedElementId === el.id}
-                        onSelect={() => setSelectedElementId(el.id)}
-                        containerBounds={{ width: CONTAINER_WIDTH, height: containerHeight }}
-                        onUpdatePos={(id, x, y) => {
-                          setElements((prev) => prev.map((item) => (item.id === id ? { ...item, x, y } : item)));
-                        }}
-                        onDragStart={() => setIsScrollEnabled(false)}
-                        onDragEnd={() => setIsScrollEnabled(true)}
-                      />
-                    ))}
-                </View>
-              </ScrollView>
+                                        canvas.width = scaledViewport.width;
+                                        canvas.height = scaledViewport.height;
+                                        page.render({ canvasContext: context, viewport: scaledViewport });
+                                      });
+                                    });
+                                  </script>
+                                </body>
+                              </html>
+                            `
+                          }}
+                          style={{ width: MAGNIFIER_WIDTH, height: MAGNIFIER_HEIGHT }}
+                          scrollEnabled={false}
+                        />
+                      )}
+                    </View>
+                  </View>
+                )}
+              </View>
 
               <View style={{ marginTop: 12, width: '100%' }}>
                 {renderPaginationBar()}
@@ -1328,16 +1869,101 @@ export default function PdfEditorScreen() {
             </View>
           )}
 
-          {/* ✍️ Modal דיאלוג מרכזי להזנת טקסט למסמך */}
+          {/* 👤 Modal אזור אישי עם עריכת שם מלא ובחירת שפות */}
+          <Modal visible={showProfileModal} transparent animationType="fade">
+            <View style={styles.modalOverlay}>
+              <View style={[styles.modalCard, { maxWidth: 440 }]}>
+                <Text style={styles.modalTitle}>{t.profileTitle}</Text>
+
+                {currentUser && (
+                  <View style={styles.profileDetailsContainer}>
+                    <View style={styles.profileRowCol}>
+                      <Text style={styles.profileLabel}>{t.profileName}</Text>
+                      <View style={{ flexDirection: 'row', gap: 6, width: '100%', marginTop: 4 }}>
+                        <TextInput
+                          style={[styles.authInput, { flex: 1, marginBottom: 0 }]}
+                          value={editingFullName}
+                          onChangeText={setEditingFullName}
+                          placeholder={t.fullNamePlaceholder}
+                        />
+                        <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#0052D4', paddingHorizontal: 10 }]} onPress={handleSaveProfileName}>
+                          <Text style={{ color: '#fff', fontSize: 11, fontWeight: 'bold' }}>{t.saveName}</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.profileRow}>
+                      <Text style={styles.profileLabel}>{t.profileEmail}</Text>
+                      <Text style={styles.profileValue}>{currentUser.email}</Text>
+                    </View>
+
+                    <View style={styles.profileRow}>
+                      <Text style={styles.profileLabel}>{t.profilePlan}</Text>
+                      <Text style={[styles.profileValueBadge, currentUser.plan !== 'free' && styles.paidPlanBadge]}>
+                        {currentUser.plan.toUpperCase()}
+                      </Text>
+                    </View>
+
+                    <View style={styles.profileRow}>
+                      <Text style={styles.profileLabel}>{t.profileEditsLeft}</Text>
+                      <Text style={styles.profileValue}>
+                        {currentUser.plan === 'premium'
+                          ? t.unlimitedEdits
+                          : t.editsCountText.replace('{count}', (currentUser.editsCount ?? 3).toString())}
+                      </Text>
+                    </View>
+
+                    {/* בחירת שפה מועדפת מהאזור האישי */}
+                    <View style={[styles.profileRowCol, { borderBottomWidth: 0, marginTop: 8 }]}>
+                      <Text style={styles.profileLabel}>{t.preferredLangLabel}</Text>
+                      <View style={[styles.langBar, { width: '100%', justifyContent: 'center', marginTop: 6 }]}>
+                        <TouchableOpacity onPress={() => setLang('en')} style={[styles.langBtn, lang === 'en' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'en' && styles.activeLangText]}>English</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setLang('he')} style={[styles.langBtn, lang === 'he' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'he' && styles.activeLangText]}>עברית</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setLang('ar')} style={[styles.langBtn, lang === 'ar' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'ar' && styles.activeLangText]}>العربية</Text></TouchableOpacity>
+                        <TouchableOpacity onPress={() => setLang('am')} style={[styles.langBtn, lang === 'am' && styles.activeLangBtn]}><Text style={[styles.langText, lang === 'am' && styles.activeLangText]}>አማርኛ</Text></TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                )}
+
+                <TouchableOpacity
+                  style={[styles.modalDownloadBtn, { marginTop: 10, backgroundColor: '#0052D4' }]}
+                  onPress={() => {
+                    setShowProfileModal(false);
+                    setAuthStep(2);
+                    setShowAuthModal(true);
+                  }}
+                >
+                  <Text style={styles.modalDownloadBtnText}>{t.upgradePlanBtn}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.modalDownloadBtn, { marginTop: 8, backgroundColor: '#dc2626' }]}
+                  onPress={() => {
+                    setCurrentUser(null);
+                    setShowProfileModal(false);
+                  }}
+                >
+                  <Text style={styles.modalDownloadBtnText}>{t.logout}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity style={[styles.modalCancelBtn, { marginTop: 10 }]} onPress={() => setShowProfileModal(false)}>
+                  <Text style={styles.modalCancelBtnText}>{t.close}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Modal דיאלוג מרכזי להזנת טקסט למסמך */}
           <Modal visible={!!activeInput} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 400 }]}>
-                <Text style={styles.modalTitle}>✍️ הוספת טקסט למסמך</Text>
-                <Text style={styles.modalSubtitle}>הקלד את הטקסט שברצונך למקם במסמך:</Text>
+                <Text style={styles.modalTitle}>{t.addTextTitle}</Text>
+                <Text style={styles.modalSubtitle}>{t.addTextSubtitle}</Text>
 
                 <TextInput
                   style={styles.promptTextInput}
-                  placeholder="הקלד כאן..."
+                  placeholder={t.typeHerePlaceholder}
                   value={currentText}
                   onChangeText={setCurrentText}
                   multiline
@@ -1359,14 +1985,14 @@ export default function PdfEditorScreen() {
                     style={[styles.actionBtn, { backgroundColor: '#0052D4', flex: 2 }]}
                     onPress={handleAddTextElement}
                   >
-                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>הוסף למסמך ✅</Text>
+                    <Text style={{ color: '#fff', fontWeight: 'bold', textAlign: 'center' }}>{t.addToDocument}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
             </View>
           </Modal>
 
-          {/* 🖋️ Modal פד חתימה */}
+          {/* 🖋️ Modal פד חתימה במגע למובייל ו-Web */}
           <Modal visible={showSignatureModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 450 }]}>
@@ -1380,8 +2006,103 @@ export default function PdfEditorScreen() {
                     style={styles.signatureCanvasBox}
                   />
                 ) : (
-                  <View style={[styles.signatureCanvasBox, { justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text>[פד חתימה במגע למובייל]</Text>
+                  <View style={{ width: 320, height: 160, borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#cbd5e1' }}>
+                    <WebView
+                      ref={mobileSignatureWebViewRef}
+                      originWhitelist={['*']}
+                      onMessage={(event) => {
+                        const dataUrl = event.nativeEvent.data;
+                        if (dataUrl && dataUrl.startsWith('data:image/png')) {
+                          setMobileSignatureDataUrl(dataUrl);
+                        }
+                      }}
+                      source={{
+                        html: `
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+                              <style>
+                                * { box-sizing: border-box; touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; }
+                                body, html { margin: 0; padding: 0; width: 100%; height: 100%; background: #ffffff; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+                                canvas { width: 100%; height: 100%; display: block; background: #ffffff; cursor: crosshair; }
+                              </style>
+                            </head>
+                            <body>
+                              <canvas id="c"></canvas>
+                              <script>
+                                const canvas = document.getElementById('c');
+                                const ctx = canvas.getContext('2d');
+                                let isDrawing = false;
+
+                                function resize() {
+                                  const rect = canvas.getBoundingClientRect();
+                                  canvas.width = rect.width * 2;
+                                  canvas.height = rect.height * 2;
+                                  ctx.scale(2, 2);
+                                  ctx.strokeStyle = '#0052D4';
+                                  ctx.lineWidth = 3;
+                                  ctx.lineCap = 'round';
+                                  ctx.lineJoin = 'round';
+                                }
+                                resize();
+
+                                function getPos(e) {
+                                  const rect = canvas.getBoundingClientRect();
+                                  const touch = (e.touches && e.touches.length > 0) ? e.touches[0] : e;
+                                  return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
+                                }
+
+                                function start(e) {
+                                  isDrawing = true;
+                                  const pos = getPos(e);
+                                  ctx.beginPath();
+                                  ctx.moveTo(pos.x, pos.y);
+                                }
+
+                                function move(e) {
+                                  if (!isDrawing) return;
+                                  const pos = getPos(e);
+                                  ctx.lineTo(pos.x, pos.y);
+                                  ctx.stroke();
+                                  send();
+                                }
+
+                                function stop() {
+                                  if (isDrawing) {
+                                    isDrawing = false;
+                                    send();
+                                  }
+                                }
+
+                                function send() {
+                                  if (window.ReactNativeWebView) {
+                                    window.ReactNativeWebView.postMessage(canvas.toDataURL('image/png'));
+                                  }
+                                }
+
+                                canvas.addEventListener('touchstart', (e) => { e.preventDefault(); start(e); }, { passive: false });
+                                canvas.addEventListener('touchmove', (e) => { e.preventDefault(); move(e); }, { passive: false });
+                                canvas.addEventListener('touchend', (e) => { e.preventDefault(); stop(); }, { passive: false });
+
+                                canvas.addEventListener('mousedown', start);
+                                canvas.addEventListener('mousemove', move);
+                                canvas.addEventListener('mouseup', stop);
+
+                                window.addEventListener('message', (e) => {
+                                  if (e.data === 'clear') {
+                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                    send();
+                                  }
+                                });
+                              </script>
+                            </body>
+                          </html>
+                        `
+                      }}
+                      style={{ width: 320, height: 160 }}
+                      scrollEnabled={false}
+                    />
                   </View>
                 )}
 
@@ -1402,7 +2123,7 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 📺 Modal פרסומת */}
+          {/* Modal פרסומת */}
           <Modal visible={showAdModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={styles.modalCard}>
@@ -1410,17 +2131,17 @@ export default function PdfEditorScreen() {
                 <Text style={styles.modalSubtitle}>{adMessage}</Text>
 
                 <View style={styles.adBannerBox}>
-                  <Text style={styles.adPlaceholderText}>[ שטח פרסומת AdSense / Rewarded Ad ]</Text>
+                  <Text style={styles.adPlaceholderText}>[ AdSense / Rewarded Ad ]</Text>
                 </View>
 
                 {!isAdFinished ? (
                   <View style={styles.timerBox}>
                     <ActivityIndicator size="small" color="#0052D4" />
-                    <Text style={styles.timerText}>זמין בעוד <Text style={styles.timerCount}>{adTimer}</Text> שניות...</Text>
+                    <Text style={styles.timerText}>{t.availableIn} <Text style={styles.timerCount}>{adTimer}</Text> {t.seconds}</Text>
                   </View>
                 ) : (
                   <TouchableOpacity style={styles.modalDownloadBtn} onPress={handleAdFinishedAction}>
-                    <Text style={styles.modalDownloadBtnText}>✅ המשך כעת</Text>
+                    <Text style={styles.modalDownloadBtnText}>{t.continueNow}</Text>
                   </TouchableOpacity>
                 )}
 
@@ -1431,7 +2152,7 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 🔐 Modal הרשמה */}
+          {/* Modal הרשמה */}
           <Modal visible={showAuthModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }} style={{ width: '100%' }}>
@@ -1442,8 +2163,8 @@ export default function PdfEditorScreen() {
 
                   {userAlreadyExistsError && (
                     <View style={styles.userExistsWarningBox}>
-                      <Text style={styles.warningTitle}>⚠️ המייל כבר רשום במערכת!</Text>
-                      <Text style={styles.warningText}>כתובת המייל "{authEmail}" כבר קיימת ב-DocFlow.</Text>
+                      <Text style={styles.warningTitle}>{t.userAlreadyExistsTitle}</Text>
+                      <Text style={styles.warningText}>{t.userAlreadyExistsDesc}</Text>
                       <TouchableOpacity
                         style={styles.switchLoginBtn}
                         onPress={() => {
@@ -1452,7 +2173,7 @@ export default function PdfEditorScreen() {
                           setAuthMode('login');
                         }}
                       >
-                        <Text style={styles.switchLoginBtnText}>🔑 לחץ כאן למעבר להתחברות</Text>
+                        <Text style={styles.switchLoginBtnText}>{t.switchToLogin}</Text>
                       </TouchableOpacity>
                     </View>
                   )}
@@ -1499,7 +2220,7 @@ export default function PdfEditorScreen() {
                           onPress={() => setSelectedPlan('free')}
                         >
                           <Text style={styles.planName}>{t.basicPlan}</Text>
-                          <Text style={styles.planPrice}>חינם</Text>
+                          <Text style={styles.planPrice}>{t.free}</Text>
                           <Text style={styles.planDesc}>{t.basicPlanDesc}</Text>
                         </TouchableOpacity>
 
@@ -1517,7 +2238,7 @@ export default function PdfEditorScreen() {
                           onPress={() => setSelectedPlan('premium')}
                         >
                           <Text style={styles.planName}>{t.premiumPlan}</Text>
-                          <Text style={styles.planPrice}>₪49/מועד</Text>
+                          <Text style={styles.planPrice}>₪49</Text>
                           <Text style={styles.planDesc}>{t.premiumPlanDesc}</Text>
                         </TouchableOpacity>
                       </View>
@@ -1549,7 +2270,7 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 👁️ Modal תצוגה מקדימה */}
+          {/* Modal תצוגה מקדימה */}
           <Modal visible={showPreviewModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 640 }]}>
@@ -1621,7 +2342,6 @@ export default function PdfEditorScreen() {
   );
 }
 
-// 🔷 רכיב נגרר נקי - מציג מסגרת עדינה בלבד בזמן בחירה ללא הסתרת טקסט
 function DraggableItem({
   element,
   isSelected,
@@ -1673,7 +2393,7 @@ function DraggableItem({
           left: element.x,
           top: element.y,
         },
-        isSelected && styles.selectedItemOutline, // 👈 מסגרת מקווקוות עדינה ושקופה
+        isSelected && styles.selectedItemOutline,
       ]}
     >
       {element.type === 'text' && (
@@ -1717,7 +2437,7 @@ async function renderPdfPageToCanvas(
   targetWidth: number,
   pageNumber: number = 1
 ) {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !canvas) return;
 
   try {
     let pdfjsLib = (window as any).pdfjsLib;
@@ -1731,6 +2451,12 @@ async function renderPdfPageToCanvas(
       });
       pdfjsLib = (window as any).pdfjsLib;
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    if ((canvas as any)._activeRenderTask) {
+      try {
+        (canvas as any)._activeRenderTask.cancel();
+      } catch (e) {}
     }
 
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer.slice(0) }).promise;
@@ -1747,53 +2473,18 @@ async function renderPdfPageToCanvas(
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    await page.render({ canvasContext: ctx, viewport }).promise;
-  } catch (err) {
-    console.error('Error rendering PDF page to canvas:', err);
+    const renderTask = page.render({ canvasContext: ctx, viewport });
+    (canvas as any)._activeRenderTask = renderTask;
+
+    await renderTask.promise;
+  } catch (err: any) {
+    if (err?.name !== 'RenderingCancelledException') {
+      console.error('Error rendering PDF page to canvas:', err);
+    }
+  } finally {
+    (canvas as any)._activeRenderTask = null;
   }
 }
-
-async function renderCrispTextToCanvas(text: string, fontSize: number = 15) {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return { base64Png: '', width: 0, height: 0 };
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return { base64Png: '', width: 0, height: 0 };
-
-  const dpiScale = 3;
-  const fontStyle = `bold ${fontSize}px Arial, sans-serif`;
-  ctx.font = fontStyle;
-
-  const textMetrics = ctx.measureText(text);
-  const displayWidth = Math.ceil(textMetrics.width) + 2;
-  const displayHeight = Math.ceil(fontSize * 1.25);
-
-  canvas.width = displayWidth * dpiScale;
-  canvas.height = displayHeight * dpiScale;
-  ctx.scale(dpiScale, dpiScale);
-
-  ctx.font = fontStyle;
-  ctx.textBaseline = 'top';
-  ctx.fillStyle = '#000000';
-  ctx.fillText(text, 1, 0);
-
-  return { base64Png: canvas.toDataURL('image/png'), width: displayWidth, height: displayHeight };
-}
-
-// function _base64ToArrayBuffer(base64: string) {
-//   const binaryString = atob(base64);
-//   const bytes = new Uint8Array(binaryString.length);
-//   for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-//   return bytes.buffer;
-// }
-
-// function _uint8ArrayToBase64(uint8: Uint8Array): string {
-//   let binary = '';
-//   const len = uint8.byteLength;
-//   for (let i = 0; i < len; i++) {
-//     binary += String.fromCharCode(uint8[i]);
-//   }
-//   return btoa(binary);
-// }
 
 const styles = StyleSheet.create({
   mainContainer: {
@@ -1838,11 +2529,10 @@ const styles = StyleSheet.create({
 
   authBtn: { backgroundColor: '#0052D4', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8 },
   authBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 11 },
-  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  userEmailText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b', maxWidth: 100 },
+  userInfoBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 8 },
+  userEmailText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b', maxWidth: 110 },
   userPlanBadge: { backgroundColor: '#64748b', color: '#fff', fontSize: 8, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 4, borderRadius: 4 },
   paidPlanBadge: { backgroundColor: '#16a34a' },
-  logoutText: { color: '#dc2626', fontSize: 10, fontWeight: 'bold' },
 
   topAdBannerSlot: { width: '100%', backgroundColor: '#eff6ff', borderWidth: 1, borderColor: '#bfdbfe', borderRadius: 10, padding: 8, marginBottom: 12, alignItems: 'center' },
   adSlotLabel: { fontSize: 9, fontWeight: 'bold', color: '#3b82f6', textTransform: 'uppercase', marginBottom: 2, alignSelf: 'flex-start' },
@@ -1865,9 +2555,9 @@ const styles = StyleSheet.create({
   changeFileBtnText: { fontSize: 11, fontWeight: 'bold', color: '#334155' },
 
   toolbarRow: { flexDirection: 'row', gap: 4, marginBottom: 8, backgroundColor: '#ffffff', padding: 4, borderRadius: 10, borderWidth: 1, borderColor: '#cbd5e1', width: '100%', flexWrap: 'wrap', justifyContent: 'center' },
-  toolBtn: { flex: 1, minWidth: 70, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderColor: '#e2e8f0', borderWidth: 1 },
+  toolBtn: { flex: 1, minWidth: 55, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8, backgroundColor: '#f8fafc', alignItems: 'center', borderColor: '#e2e8f0', borderWidth: 1 },
   activeToolBtn: { backgroundColor: '#0052D4', borderColor: '#0052D4' },
-  toolBtnText: { fontSize: 11, fontWeight: 'bold', color: '#334155' },
+  toolBtnText: { fontSize: 10, fontWeight: 'bold', color: '#334155' },
   activeToolBtnText: { color: '#ffffff' },
 
   zoomControlRow: {
@@ -1884,16 +2574,34 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     width: '100%',
   },
-  zoomBtn: { backgroundColor: '#f1f5f9', paddingVertical: 4, paddingHorizontal: 8, borderRadius: 14 },
-  zoomBtnText: { fontSize: 11, fontWeight: 'bold', color: '#1e293b' },
-  zoomResetBtn: { paddingHorizontal: 4 },
-  zoomResetText: { fontSize: 11, fontWeight: 'bold', color: '#0052D4' },
+  zoomControlLabel: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
+  zoomBtn: { backgroundColor: '#f1f5f9', paddingVertical: 3, paddingHorizontal: 8, borderRadius: 12, borderWidth: 1, borderColor: '#cbd5e1' },
+  activeZoomBtn: { backgroundColor: '#0052D4', borderColor: '#0052D4' },
+  zoomBtnText: { fontSize: 10, fontWeight: 'bold', color: '#334155' },
+  activeZoomBtnText: { color: '#ffffff' },
 
   fontDefaultControl: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#f8fafc', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12, borderWidth: 1, borderColor: '#e2e8f0' },
   fontBtnText: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', paddingHorizontal: 4 },
   fontSizeLabel: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
 
-  /* 🎯 סרגל ניהול מרכזי ונקי לאלמנט שנבחר */
+  magnifierBox: {
+    position: 'absolute',
+    borderRadius: 10,
+    borderWidth: 2.5,
+    borderColor: '#0052D4',
+    backgroundColor: '#ffffff',
+    overflow: 'hidden',
+    zIndex: 999,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+  },
+  magnifierInnerBox: {
+    overflow: 'hidden',
+  },
+
   selectedElementControlDock: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -1969,7 +2677,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     minHeight: 90,
-    textAlign: 'right',
     fontSize: 14,
     backgroundColor: '#f8fafc',
     textAlignVertical: 'top',
@@ -1985,7 +2692,14 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', marginBottom: 6 },
   modalSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 14 },
   sectionTitle: { fontSize: 13, fontWeight: 'bold', color: '#1e293b', marginTop: 8, marginBottom: 6, alignSelf: 'flex-start' },
-  authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 38, marginBottom: 8, textAlign: 'right', fontSize: 12 },
+  authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 38, marginBottom: 8, fontSize: 12 },
+
+  profileDetailsContainer: { width: '100%', backgroundColor: '#f8fafc', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#e2e8f0', marginVertical: 10 },
+  profileRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  profileRowCol: { flexDirection: 'column', alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  profileLabel: { fontSize: 12, fontWeight: 'bold', color: '#64748b' },
+  profileValue: { fontSize: 12, fontWeight: 'bold', color: '#0f172a' },
+  profileValueBadge: { backgroundColor: '#64748b', color: '#fff', fontSize: 10, fontWeight: 'bold', paddingVertical: 2, paddingHorizontal: 6, borderRadius: 4 },
 
   userExistsWarningBox: {
     width: '100%',
