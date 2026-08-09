@@ -71,7 +71,7 @@ const I18N = {
     redactTool: '⬛ צנזור',
     redactToolDesc: 'הסתר מידע רגיש וחסוי בבטחה',
     signatureTool: '🖋️ חתימה',
-    signatureToolDesc: 'חתימה בנגיעה או בעכבר',
+    signatureToolDesc: 'חתימה בנגיעה, בעכבר או העלאת תמונה',
     preview: '👁️ תצוגה מקדימה',
     download: '💾 הורד PDF סופי',
     loginRegister: '🔑 התחבר / הרשם',
@@ -82,7 +82,9 @@ const I18N = {
     nextPage: 'עמוד הבא ▶',
     pageOf: 'עמוד {current} מתוך {total}',
     guestPageLimit: '(אורח: עמוד 1 בלבד)',
-    signModalTitle: '🖋️ צייר את חתימתך למטה:',
+    signModalTitle: '🖋️ הוסף את חתימתך:',
+    uploadSigImage: '📁 העלה קובץ תמונת חתימה (PNG/JPG)',
+    orDrawBelow: 'או צייר חתימה ידנית למטה:',
     clear: 'ניקוי',
     confirmSignature: '✅ אישור חתימה',
     close: 'סגור',
@@ -114,7 +116,7 @@ const I18N = {
     redactTool: '⬛ Redact',
     redactToolDesc: 'Hide sensitive and confidential text',
     signatureTool: '🖋️ Signature',
-    signatureToolDesc: 'Sign with touch or mouse',
+    signatureToolDesc: 'Sign with touch, mouse, or upload image',
     preview: '👁️ Preview',
     download: '💾 Download PDF',
     loginRegister: '🔑 Login / Register',
@@ -125,7 +127,9 @@ const I18N = {
     nextPage: 'Next ▶',
     pageOf: 'Page {current} of {total}',
     guestPageLimit: '(Guest: Page 1 only)',
-    signModalTitle: '🖋️ Draw your signature below:',
+    signModalTitle: '🖋️ Add your signature:',
+    uploadSigImage: '📁 Upload signature image (PNG/JPG)',
+    orDrawBelow: 'Or draw signature manually below:',
     clear: 'Clear',
     confirmSignature: '✅ Apply Signature',
     close: 'Close',
@@ -157,7 +161,7 @@ const I18N = {
     redactTool: '⬛ إخفاء',
     redactToolDesc: 'إخفاء المعلومات الحساسة',
     signatureTool: '🖋️ توقيع',
-    signatureToolDesc: 'التوقيع باللمس أو الماوس',
+    signatureToolDesc: 'التوقيع باللمس، الماوس או رفع صورة',
     preview: '👁️ معاينة',
     download: '💾 تحميل PDF',
     loginRegister: '🔑 تسجيل الدخول',
@@ -168,7 +172,9 @@ const I18N = {
     nextPage: 'التالي ▶',
     pageOf: 'صفحة {current} من {total}',
     guestPageLimit: '(زائر: الصفحة 1 فقط)',
-    signModalTitle: '🖋️ ارسم توقيعك أدناه:',
+    signModalTitle: '🖋️ أضف توقيعك:',
+    uploadSigImage: '📁 رفع صورة التوقيع (PNG/JPG)',
+    orDrawBelow: 'أو ارسم التوقيع ידנית أدناه:',
     clear: 'مسح',
     confirmSignature: '✅ تأكيد التوقيع',
     close: 'إغلاق',
@@ -200,7 +206,7 @@ const I18N = {
     redactTool: '⬛ ሰርዝ',
     redactToolDesc: 'ሚስጥራዊ መረጃዎችን ደብቅ',
     signatureTool: '🖋️ ፊርማ',
-    signatureToolDesc: 'በንክኪ ወይም በሲያን ይፈርሙ',
+    signatureToolDesc: 'በንክኪ፣ በሲያን ወይም ምስል በመጫን ይፈርሙ',
     preview: '👁️ ቅድመ እይታ',
     download: '💾 ፒዲኤፍ አውርድ',
     loginRegister: '🔑 ግባ / ተመዝገብ',
@@ -211,7 +217,9 @@ const I18N = {
     nextPage: 'ቀጣይ ገጽ ▶',
     pageOf: 'ገጽ {current} ከ {total}',
     guestPageLimit: '(እንግዳ: ገጽ 1 ብቻ)',
-    signModalTitle: '🖋️ ፊርማዎን ከታች ይሳሉ:',
+    signModalTitle: '🖋️ ፊርማዎን ያክሉ:',
+    uploadSigImage: '📁 የፊርማ ምስል ስቀል (PNG/JPG)',
+    orDrawBelow: 'ወይም ከታች በእጅ ይሳሉ:',
     clear: 'አጽዳ',
     confirmSignature: '✅ ፊርማ አረጋግጥ',
     close: 'ዝጋ',
@@ -244,7 +252,6 @@ function DocFlowLogo() {
   );
 }
 
-// 🚀 פונקציית חילוץ חסינה למנוע ה-PDF
 async function getPdfLib() {
   const pdfLibModule = await loadPDFDocument();
   if (!pdfLibModule) throw new Error('מנוע ה-PDF לא נטען');
@@ -255,7 +262,6 @@ async function getPdfLib() {
   return { PDFDocument, rgb };
 }
 
-// 🚀 המרת Base64 ל-ArrayBuffer חסינה ללא תלות ב-atob בדפדפן/מובייל
 const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
 
 function _base64ToArrayBuffer(base64: string): ArrayBuffer {
@@ -284,7 +290,6 @@ function _base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
-// 🚀 המרת Uint8Array ל-Base64 חסינה ללא תלות ב-btoa בדפדפן/מובייל
 function _uint8ArrayToBase64(bytes: Uint8Array): string {
   let base64 = '';
   const len = bytes.length;
@@ -313,14 +318,10 @@ export default function PdfEditorScreen() {
   const { width: windowWidth } = useWindowDimensions();
   const BASE_CONTAINER_WIDTH = Math.min(windowWidth - 24, 600);
 
-  // 🔎 זום דינמי למסמך
   const [zoomScale, setZoomScale] = useState<number>(1.0);
   const CONTAINER_WIDTH = BASE_CONTAINER_WIDTH * zoomScale;
 
-  // 🔤 גודל פונט ברירת מחדל לטקסט חדש
   const [defaultFontSize, setDefaultFontSize] = useState<number>(15);
-
-  // 🔒 נעילת גלילת הרקע בזמן גרירת אלמנט
   const [isScrollEnabled, setIsScrollEnabled] = useState<boolean>(true);
 
   const [lang, setLang] = useState<Language>('he');
@@ -336,7 +337,6 @@ export default function PdfEditorScreen() {
   const [elements, setElements] = useState<EditorElement[]>([]);
   const [selectedElementId, setSelectedElementId] = useState<string | null>(null);
 
-  // ✍️ מודאל הזנת טקסט
   const [activeInput, setActiveInput] = useState<{ x: number; y: number } | null>(null);
   const [currentText, setCurrentText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -473,6 +473,58 @@ export default function PdfEditorScreen() {
     setSelectedElementId(newElement.id);
     setShowSignatureModal(false);
     setSignatureClickPos(null);
+  };
+
+  // 📁 פונקציה להעלאת תמונת חתימה מקובץ (PNG / JPG)
+  const handleUploadSignatureImage = async () => {
+    if (!signatureClickPos) return;
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/png', 'image/jpeg', 'image/jpg'],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const asset = result.assets[0];
+      let dataUrl = '';
+
+      if (Platform.OS === 'web') {
+        const res = await fetch(asset.uri);
+        const blob = await res.blob();
+        dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        const mime = asset.mimeType || 'image/png';
+        dataUrl = `data:${mime};base64,${base64}`;
+      }
+
+      const newElement: EditorElement = {
+        id: Date.now().toString(),
+        type: 'signature',
+        imageUri: dataUrl,
+        x: Math.max(0, signatureClickPos.x - 60),
+        y: Math.max(0, signatureClickPos.y - 30),
+        width: 120,
+        height: 60,
+        fontSize: defaultFontSize,
+        pageIndex: currentPageIndex,
+      };
+
+      setElements((prev) => [...prev, newElement]);
+      setSelectedElementId(newElement.id);
+      setShowSignatureModal(false);
+      setSignatureClickPos(null);
+    } catch (err: any) {
+      console.error('Signature upload error:', err);
+      Alert.alert('שגיאה', err?.message || 'לא ניתן לטעון את תמונת החתימה.');
+    }
   };
 
   const handlePageChange = (newIndex: number) => {
@@ -793,7 +845,6 @@ export default function PdfEditorScreen() {
     }
   };
 
-  // 🎯 פונקציה מרכזית ללחיצה על הקנבס
   const handleCanvasClick = (clickX: number, clickY: number) => {
     if (selectedElementId) {
       setSelectedElementId(null);
@@ -876,7 +927,7 @@ export default function PdfEditorScreen() {
     for (const el of elements) {
       const targetPage = pages[el.pageIndex] || pages[0];
 
-      if (el.type === 'text' && el.text) {
+if (el.type === 'text' && el.text) {
         if (Platform.OS === 'web') {
           const { base64Png, width: imgW, height: imgH } = await renderCrispTextToCanvas(el.text, el.fontSize);
           if (base64Png) {
@@ -885,7 +936,10 @@ export default function PdfEditorScreen() {
             const finalImgWidth = imgW * scaleX;
             const finalImgHeight = imgH * scaleY;
             const finalPdfX = el.x * scaleX;
-            const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight;
+            
+            // 🚀 הוספת מקדם תיקון אנכי (מוריד את הטקסט מעט למטה כדי להתאים בול לקו במסך)
+            const verticalOffset = el.fontSize * 0.3 * scaleY;
+            const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalImgHeight - verticalOffset;
 
             targetPage.drawImage(pngImage, {
               x: Math.max(0, finalPdfX),
@@ -895,9 +949,11 @@ export default function PdfEditorScreen() {
             });
           }
         } else {
-          // 🚀 הוספת טקסט חסינה במובייל
+          // 🚀 הוספת תיקון אנכי גם למובייל
           const finalPdfX = el.x * scaleX;
-          const finalPdfY = pdfDimensions.height - (el.y * scaleY) - (el.fontSize * scaleY);
+          const verticalOffset = el.fontSize * 0.3 * scaleY;
+          const finalPdfY = pdfDimensions.height - (el.y * scaleY) - (el.fontSize * scaleY) - verticalOffset;
+          
           try {
             targetPage.drawText(el.text, {
               x: Math.max(0, finalPdfX),
@@ -910,8 +966,15 @@ export default function PdfEditorScreen() {
           }
         }
       } else if (el.type === 'signature' && el.imageUri) {
-        const imageBytes = _base64ToArrayBuffer(el.imageUri.replace(/^data:image\/png;base64,/, ''));
-        const pngImage = await pdfDoc.embedPng(imageBytes);
+        const base64Clean = el.imageUri.replace(/^data:image\/[a-z]+;base64,/, '');
+        const imageBytes = _base64ToArrayBuffer(base64Clean);
+        
+        let pdfImage;
+        if (el.imageUri.includes('image/jpeg') || el.imageUri.includes('image/jpg')) {
+          pdfImage = await pdfDoc.embedJpg(imageBytes);
+        } else {
+          pdfImage = await pdfDoc.embedPng(imageBytes);
+        }
 
         const finalWidth = el.width * scaleX;
         const finalHeight = el.height * scaleY;
@@ -919,7 +982,7 @@ export default function PdfEditorScreen() {
         const finalPdfX = el.x * scaleX;
         const finalPdfY = pdfDimensions.height - (el.y * scaleY) - finalHeight;
 
-        targetPage.drawImage(pngImage, {
+        targetPage.drawImage(pdfImage, {
           x: Math.max(0, finalPdfX),
           y: finalPdfY,
           width: finalWidth,
@@ -990,13 +1053,11 @@ export default function PdfEditorScreen() {
       <StatusBar backgroundColor="#0f172a" barStyle="light-content" translucent={false} />
 
       <SafeAreaView style={styles.safeArea}>
-        {/* 🔒 ScrollView ראשי עם שליטה מלאה בנעילת גלילה */}
         <ScrollView
           scrollEnabled={isScrollEnabled}
           contentContainerStyle={styles.container}
           keyboardShouldPersistTaps="handled"
         >
-          {/* 🌟 Header */}
           <View style={[styles.headerBar, { maxWidth: BASE_CONTAINER_WIDTH }]}>
             <DocFlowLogo />
 
@@ -1033,7 +1094,6 @@ export default function PdfEditorScreen() {
             )}
           </View>
 
-          {/* 📢 באנר עליון למבקרים */}
           {!currentUser && (
             <View style={[styles.topAdBannerSlot, { maxWidth: BASE_CONTAINER_WIDTH }]}>
               <Text style={styles.adSlotLabel}>Sponsored</Text>
@@ -1041,7 +1101,6 @@ export default function PdfEditorScreen() {
             </View>
           )}
 
-          {/* 🏠 Hero Section */}
           {!pdfUri ? (
             <View style={[styles.heroLandingCard, { maxWidth: BASE_CONTAINER_WIDTH }]}>
               <Text style={styles.heroTitle}>{t.heroTitle}</Text>
@@ -1072,13 +1131,11 @@ export default function PdfEditorScreen() {
               </View>
             </View>
           ) : (
-            /* 📝 אזור העריכה */
             <View style={[styles.editorArea, { maxWidth: BASE_CONTAINER_WIDTH }]}>
               <TouchableOpacity style={styles.changeFileBtn} onPress={pickDocument} disabled={loading}>
                 <Text style={styles.changeFileBtnText}>{t.changePdf}</Text>
               </TouchableOpacity>
 
-              {/* סרגל כלים רספונסיבי */}
               <View style={styles.toolbarRow}>
                 <TouchableOpacity
                   style={[styles.toolBtn, activeTool === 'text' && styles.activeToolBtn]}
@@ -1109,7 +1166,6 @@ export default function PdfEditorScreen() {
                 </TouchableOpacity>
               </View>
 
-              {/* 🔍 סרגל בקרת זום + פונט ברירת מחדל */}
               <View style={styles.zoomControlRow}>
                 <TouchableOpacity style={styles.zoomBtn} onPress={() => setZoomScale((prev) => Math.max(0.5, prev - 0.2))}>
                   <Text style={styles.zoomBtnText}>🔍 -</Text>
@@ -1121,7 +1177,6 @@ export default function PdfEditorScreen() {
                   <Text style={styles.zoomBtnText}>🔍 +</Text>
                 </TouchableOpacity>
 
-                {/* 🔤 בקרת פונט ברירת מחדל */}
                 <View style={styles.fontDefaultControl}>
                   <TouchableOpacity onPress={() => setDefaultFontSize((prev) => Math.max(10, prev - 2))}>
                     <Text style={styles.fontBtnText}>A-</Text>
@@ -1133,7 +1188,6 @@ export default function PdfEditorScreen() {
                 </View>
               </View>
 
-              {/* 🎯 סרגל ניהול ייעודי לאלמנט שנבחר (מחוץ למסמך - שומר על טקסט נקי!) */}
               {selectedElement && (
                 <View style={styles.selectedElementControlDock}>
                   <View style={styles.dockHeaderRow}>
@@ -1146,7 +1200,6 @@ export default function PdfEditorScreen() {
                   </View>
 
                   <View style={styles.dockControlsRow}>
-                    {/* חיצי מיקום */}
                     <View style={styles.dockGroup}>
                       <Text style={styles.dockGroupLabel}>מיקום:</Text>
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(0, -3)}><Text style={styles.nudgeText}>▲</Text></TouchableOpacity>
@@ -1155,7 +1208,6 @@ export default function PdfEditorScreen() {
                       <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudgeSelected(3, 0)}><Text style={styles.nudgeText}>►</Text></TouchableOpacity>
                     </View>
 
-                    {/* שינוי פונט או רוחב */}
                     {selectedElement.type === 'text' ? (
                       <View style={styles.dockGroup}>
                         <Text style={styles.dockGroupLabel}>פונט:</Text>
@@ -1179,7 +1231,6 @@ export default function PdfEditorScreen() {
                       </View>
                     )}
 
-                    {/* מחיקה */}
                     <TouchableOpacity
                       style={styles.dockDeleteBtn}
                       onPress={() => {
@@ -1195,7 +1246,6 @@ export default function PdfEditorScreen() {
 
               {renderPaginationBar()}
 
-              {/* 📄 תצוגת הקובץ בגלילה אופקית לתמיכה בזום-אין (ננעלת בזמן גרירה) */}
               <ScrollView
                 horizontal
                 scrollEnabled={isScrollEnabled}
@@ -1285,12 +1335,10 @@ export default function PdfEditorScreen() {
                     )
                   )}
 
-                  {/* שכבת לחיצה ל-Web בלבד */}
                   {Platform.OS === 'web' && (
                     <Pressable style={StyleSheet.absoluteFillObject} onPress={handleContainerPress} />
                   )}
 
-                  {/* 🎨 אלמנטים נגררים נקיים בלבד (מסגרת עדינה ללא הסתרות!) */}
                   {elements
                     .filter((el) => el.pageIndex === currentPageIndex)
                     .map((el) => (
@@ -1328,7 +1376,6 @@ export default function PdfEditorScreen() {
             </View>
           )}
 
-          {/* ✍️ Modal דיאלוג מרכזי להזנת טקסט למסמך */}
           <Modal visible={!!activeInput} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 400 }]}>
@@ -1366,21 +1413,28 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 🖋️ Modal פד חתימה */}
+          {/* 🖋️ Modal פד חתימה והעלאת תמונה */}
           <Modal visible={showSignatureModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 450 }]}>
                 <Text style={styles.modalTitle}>{t.signModalTitle}</Text>
 
+                {/* כפתור העלאת קובץ תמונה לחתימה */}
+                <TouchableOpacity style={styles.uploadSigFileBtn} onPress={handleUploadSignatureImage}>
+                  <Text style={styles.uploadSigFileBtnText}>{t.uploadSigImage}</Text>
+                </TouchableOpacity>
+
+                <Text style={styles.modalSubtitle}>{t.orDrawBelow}</Text>
+
                 {Platform.OS === 'web' ? (
                   <canvas
                     ref={initSignatureCanvas}
                     width={320}
-                    height={160}
+                    height={140}
                     style={styles.signatureCanvasBox}
                   />
                 ) : (
-                  <View style={[styles.signatureCanvasBox, { justifyContent: 'center', alignItems: 'center' }]}>
+                  <View style={[styles.signatureCanvasBox, { width: 320, height: 140, justifyContent: 'center', alignItems: 'center' }]}>
                     <Text>[פד חתימה במגע למובייל]</Text>
                   </View>
                 )}
@@ -1402,7 +1456,6 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 📺 Modal פרסומת */}
           <Modal visible={showAdModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={styles.modalCard}>
@@ -1431,7 +1484,6 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 🔐 Modal הרשמה */}
           <Modal visible={showAuthModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center' }} style={{ width: '100%' }}>
@@ -1549,7 +1601,6 @@ export default function PdfEditorScreen() {
             </View>
           </Modal>
 
-          {/* 👁️ Modal תצוגה מקדימה */}
           <Modal visible={showPreviewModal} transparent animationType="fade">
             <View style={styles.modalOverlay}>
               <View style={[styles.modalCard, { maxWidth: 640 }]}>
@@ -1621,7 +1672,6 @@ export default function PdfEditorScreen() {
   );
 }
 
-// 🔷 רכיב נגרר נקי - מציג מסגרת עדינה בלבד בזמן בחירה ללא הסתרת טקסט
 function DraggableItem({
   element,
   isSelected,
@@ -1640,20 +1690,29 @@ function DraggableItem({
   onDragEnd?: () => void;
 }) {
   const startPos = useRef({ x: element.x, y: element.y });
+  
+  // 🚀 שומר את הנתונים העדכניים של האלמנט למניעת Stale Closure
+  const elementRef = useRef(element);
+  useEffect(() => {
+    elementRef.current = element;
+  });
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
+      onStartShouldSetPanResponderCapture: () => true,
       onMoveShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponderCapture: () => true,
       onPanResponderGrant: () => {
-        startPos.current = { x: element.x, y: element.y };
+        // 🚀 לוקח את המיקום האמיתי והעדכני ביותר מהרפרנס
+        startPos.current = { x: elementRef.current.x, y: elementRef.current.y };
         onSelect();
         onDragStart?.();
       },
       onPanResponderMove: (_, gestureState) => {
         const newX = Math.max(0, Math.min(containerBounds.width - 20, startPos.current.x + gestureState.dx));
         const newY = Math.max(0, Math.min(containerBounds.height - 15, startPos.current.y + gestureState.dy));
-        onUpdatePos(element.id, newX, newY);
+        onUpdatePos(elementRef.current.id, newX, newY);
       },
       onPanResponderRelease: () => {
         onDragEnd?.();
@@ -1673,7 +1732,7 @@ function DraggableItem({
           left: element.x,
           top: element.y,
         },
-        isSelected && styles.selectedItemOutline, // 👈 מסגרת מקווקוות עדינה ושקופה
+        isSelected && styles.selectedItemOutline,
       ]}
     >
       {element.type === 'text' && (
@@ -1779,22 +1838,6 @@ async function renderCrispTextToCanvas(text: string, fontSize: number = 15) {
   return { base64Png: canvas.toDataURL('image/png'), width: displayWidth, height: displayHeight };
 }
 
-// function _base64ToArrayBuffer(base64: string) {
-//   const binaryString = atob(base64);
-//   const bytes = new Uint8Array(binaryString.length);
-//   for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-//   return bytes.buffer;
-// }
-
-// function _uint8ArrayToBase64(uint8: Uint8Array): string {
-//   let binary = '';
-//   const len = uint8.byteLength;
-//   for (let i = 0; i < len; i++) {
-//     binary += String.fromCharCode(uint8[i]);
-//   }
-//   return btoa(binary);
-// }
-
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
@@ -1873,7 +1916,7 @@ const styles = StyleSheet.create({
   zoomControlRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justify: 'space-between',
+    justifyContent: 'space-between',
     gap: 6,
     backgroundColor: '#ffffff',
     paddingVertical: 4,
@@ -1893,7 +1936,6 @@ const styles = StyleSheet.create({
   fontBtnText: { fontSize: 11, fontWeight: 'bold', color: '#0052D4', paddingHorizontal: 4 },
   fontSizeLabel: { fontSize: 10, fontWeight: 'bold', color: '#1e293b' },
 
-  /* 🎯 סרגל ניהול מרכזי ונקי לאלמנט שנבחר */
   selectedElementControlDock: {
     width: '100%',
     backgroundColor: '#ffffff',
@@ -1926,6 +1968,20 @@ const styles = StyleSheet.create({
     borderColor: '#cbd5e1',
     borderRadius: 8,
   },
+  uploadSigFileBtn: {
+    backgroundColor: '#0284c7',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  uploadSigFileBtnText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 12,
+  },
 
   button: { backgroundColor: '#0052D4', paddingVertical: 10, paddingHorizontal: 18, borderRadius: 8 },
   buttonText: { color: '#ffffff', fontSize: 13, fontWeight: 'bold' },
@@ -1939,13 +1995,14 @@ const styles = StyleSheet.create({
 
   pdfViewerContainer: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, position: 'relative', overflow: 'hidden' },
 
-  draggableItemWrapper: {
+draggableItemWrapper: {
     position: 'absolute',
     alignSelf: 'flex-start',
     zIndex: 10,
     padding: 2,
     borderRadius: 4,
-  },
+    userSelect: 'none', // 👈 מונע מהסמן להפוך לסמן הקלדה ומבטל בחירת טקסט בדפדפן
+  } as any,
   selectedItemOutline: {
     borderWidth: 1.5,
     borderColor: '#0052D4',
@@ -1983,7 +2040,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)', justifyContent: 'center', alignItems: 'center', padding: 12 },
   modalCard: { backgroundColor: '#ffffff', borderRadius: 16, padding: 20, width: '100%', maxWidth: 480, alignItems: 'center', elevation: 8 },
   modalTitle: { fontSize: 18, fontWeight: 'bold', color: '#0f172a', marginBottom: 6 },
-  modalSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 14 },
+  modalSubtitle: { fontSize: 12, color: '#64748b', textAlign: 'center', marginBottom: 10 },
   sectionTitle: { fontSize: 13, fontWeight: 'bold', color: '#1e293b', marginTop: 8, marginBottom: 6, alignSelf: 'flex-start' },
   authInput: { width: '100%', borderWidth: 1, borderColor: '#cbd5e1', borderRadius: 8, paddingHorizontal: 12, height: 38, marginBottom: 8, textAlign: 'right', fontSize: 12 },
 
