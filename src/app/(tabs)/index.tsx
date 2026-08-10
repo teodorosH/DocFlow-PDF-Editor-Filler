@@ -658,7 +658,7 @@ export default function PdfEditorScreen() {
       setLoading(true);
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
-        copyToCacheDirectory: false,
+        copyToCacheDirectory: true,
       });
 
       if (result.canceled || !result.assets?.[0]) return;
@@ -670,17 +670,9 @@ export default function PdfEditorScreen() {
       setSelectedElementId(null);
       setZoomScale(1.0);
 
-      let bytes: ArrayBuffer;
-
-      if (Platform.OS === 'web') {
-        const res = await fetch(uri);
-        bytes = await res.arrayBuffer();
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        bytes = _base64ToArrayBuffer(base64);
-      }
+      // Fetch handles file:// URIs natively and avoids "isn't readable" Android errors
+      const res = await fetch(uri);
+      const bytes = await res.arrayBuffer();
 
       setPdfBytes(bytes);
 
@@ -1098,18 +1090,14 @@ export default function PdfEditorScreen() {
       const absY = Math.max(0, pageHeight - (el.y * pageHeight) - absHeight);
 
       if (el.type === 'text' && el.text) {
-        if (Platform.OS === 'web') {
+        try {
+          // Use renderCrispTextToCanvas universally for both Web and Mobile
+          // to completely avoid WinAnsi font encoding errors with Hebrew/Arabic characters.
           const renderedText = await renderCrispTextToCanvas(el.text, el.fontSize);
           if (renderedText.base64Png) {
             const imageBytes = _base64ToArrayBuffer(renderedText.base64Png.replace(/^data:image\/png;base64,/, ''));
             const pngImage = await pdfDoc.embedPng(imageBytes);
-            // Keep the text's natural aspect ratio. Stretching a text bitmap
-            // into a fixed rectangle was the reason Hebrew text could look
-            // distorted or vertically compressed in Preview/PDF.
-            const naturalRatio = renderedText.width / Math.max(1, renderedText.height);
-
-            // Convert the editor's CSS-pixel font rendering to PDF points.
-            // Keep the selected font size; only shrink if the element box is too small.
+            
             const cssPxToPdfPt = 72 / 96;
             const naturalPdfHeight = renderedText.height * cssPxToPdfPt;
             const naturalPdfWidth = renderedText.width * cssPxToPdfPt;
@@ -1118,6 +1106,7 @@ export default function PdfEditorScreen() {
             const drawWidth = Math.min(absWidth, naturalPdfWidth * fitScale);
             const drawX = absX;
             const drawY = absY + (absHeight - drawHeight) / 2;
+
             targetPage.drawImage(pngImage, {
               x: drawX,
               y: drawY,
@@ -1125,17 +1114,8 @@ export default function PdfEditorScreen() {
               height: drawHeight,
             });
           }
-        } else {
-          try {
-            targetPage.drawText(el.text, {
-              x: absX,
-              y: absY,
-              size: Math.max(1, el.fontSize * (pageWidth / BASE_CONTAINER_WIDTH)),
-              color: rgb(0, 0, 0),
-            });
-          } catch (fontErr) {
-            console.warn('Text draw warning:', fontErr);
-          }
+        } catch (textErr) {
+          console.warn('Text render/draw warning:', textErr);
         }
       } else if (el.type === 'signature' && el.imageUri) {
         const match = el.imageUri.match(/^data:image\/([^;]+);base64,(.+)$/);
