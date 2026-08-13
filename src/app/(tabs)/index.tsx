@@ -1,7 +1,8 @@
 import { loadPDFDocument } from "@/utils/pdfLoader";
-import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
+import { File } from "expo-file-system";
+import * as DocumentPicker from "expo-document-picker";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -535,6 +536,20 @@ function _base64ToArrayBuffer(base64: string): ArrayBuffer {
   return bytes.buffer;
 }
 
+const arrayBufferToBase64 = (buffer: ArrayBuffer): string => {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+
+  const chunkSize = 0x8000;
+
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+
+  return btoa(binary);
+};
+
 function _uint8ArrayToBase64(bytes: Uint8Array): string {
   let base64 = "";
   const len = bytes.length;
@@ -894,38 +909,51 @@ export default function PdfEditorScreen() {
 
   const handleUploadSignatureImage = async () => {
     if (!signatureClickPos) return;
+
     try {
-      let asset: { uri: string; name: string; mimeType: string } | null = null;
-
-      if (Platform.OS === "web") {
-        asset = await pickFileWeb("image/png,image/jpeg,image/jpg");
-        if (!asset) return;
-      } else {
-        const result = await DocumentPicker.getDocumentAsync({
-          type: ["image/png", "image/jpeg", "image/jpg"],
-          copyToCacheDirectory: true,
-        });
-        if (result.canceled || !result.assets?.[0]) return;
-        asset = result.assets[0];
-      }
-
       let dataUrl = "";
 
       if (Platform.OS === "web") {
+        const asset = await pickFileWeb("image/png,image/jpeg,image/jpg");
+        if (!asset) return;
+
         const res = await fetch(asset.uri);
         const blob = await res.blob();
-        dataUrl = await new Promise<string>((resolve) => {
+
+        dataUrl = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
+
+          reader.onloadend = () => {
+            resolve(reader.result as string);
+          };
+
+          reader.onerror = () => {
+            reject(new Error("Failed to read selected image"));
+          };
+
           reader.readAsDataURL(blob);
         });
       } else {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: FileSystem.EncodingType.Base64,
+        const result = await DocumentPicker.getDocumentAsync({
+          type: "image/*",
+          copyToCacheDirectory: true,
         });
+
+        if (result.canceled || !result.assets?.[0]) return;
+
+        const asset = result.assets[0];
+
+        // Use the same approach that already works for your PDFs.
+        const res = await fetch(asset.uri);
+        const bytes = await res.arrayBuffer();
+
+        const base64 = arrayBufferToBase64(bytes);
         const mime = asset.mimeType || "image/png";
+
         dataUrl = `data:${mime};base64,${base64}`;
       }
+
+      if (!dataUrl) return;
 
       placeSignatureElement(dataUrl);
     } catch (err: any) {
