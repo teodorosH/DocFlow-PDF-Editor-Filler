@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Platform, Text } from 'react-native';
-import { useAppLanguage } from './languageStore';';
+import { useAppLanguage } from '../languageStore';
+
 
 const labels = {
   he: { editor: 'עריכת PDF', generate: 'הפקת מסמך', history: 'היסטוריה' },
