@@ -1,8 +1,11 @@
 import { loadPDFDocument } from "@/utils/pdfLoader";
-import * as FileSystem from "expo-file-system/legacy";
+// import * as FileSystem from "expo-file-system/legacy";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { File } from "expo-file-system";
 import * as DocumentPicker from "expo-document-picker";
+import fontkit from "@pdf-lib/fontkit";
+import { Asset } from "expo-asset";
+import * as FileSystem from "expo-file-system";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -24,7 +27,6 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { WebView } from "react-native-webview";
 import { setAppLanguage, useAppLanguage } from "../../languageStore";
-import { Asset } from "expo-asset";
 
 const API_URL =
   process.env.EXPO_PUBLIC_API_URL || "https://docflow.teoplatform.com";
@@ -1178,41 +1180,92 @@ export default function PdfEditorScreen() {
     }
   };
 
+
   const executeFinalDownload = async () => {
     setLoading(true);
-    try {
-      const pdfResultBytes = await buildModifiedPdfBytes(false);
-      if (!pdfResultBytes) return;
 
+    try {
+      const pdfResultBytes = await buildModifiedPdfBytes(
+        pdfBytes,
+        elements
+      );
+
+      if (!pdfResultBytes || pdfResultBytes.length === 0) {
+        throw new Error("Could not create PDF");
+      }
+
+      const fileName = `DocFlow_${Date.now()}.pdf`;
+
+      // 🌐 WEB
       if (Platform.OS === "web") {
-        const blob = new Blob([pdfResultBytes], { type: "application/pdf" });
+        const blob = new Blob(
+          [pdfResultBytes],
+          { type: "application/pdf" }
+        );
+
         const blobUrl = URL.createObjectURL(blob);
 
         const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = `DocFlow_${Date.now()}.pdf`;
+        a.download = fileName;
+
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-      } else {
-        const base64Save = _uint8ArrayToBase64(pdfResultBytes);
-        const filePath = `${
-          FileSystem.documentDirectory || ""
-        }DocFlow_${Date.now()}.pdf`;
-        await FileSystem.writeAsStringAsync(filePath, base64Save, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await Sharing.shareAsync(filePath);
+
+        setTimeout(() => {
+          URL.revokeObjectURL(blobUrl);
+        }, 1000);
+
+        alert(t.downloadSuccess + " 🎉");
+        return;
       }
 
-      if (Platform.OS === "web") {
-        alert(t.downloadSuccess + " 🎉");
-      } else {
-        Alert.alert(t.downloadSuccessTitle, t.downloadSuccess);
+      // 📱 ANDROID / iOS
+      const file = new File(Paths.cache, fileName);
+
+      // כותבים ישירות את ה-Uint8Array
+      file.write(pdfResultBytes);
+
+      console.log("✅ PDF created:");
+      console.log("URI:", file.uri);
+      console.log("Exists:", file.exists);
+      console.log("Size:", file.size);
+
+      if (!file.exists || file.size === 0) {
+        throw new Error("PDF file was not created correctly");
       }
+
+      const sharingAvailable =
+        await Sharing.isAvailableAsync();
+
+      if (!sharingAvailable) {
+        throw new Error(
+          "File sharing is not available on this device"
+        );
+      }
+
+      await Sharing.shareAsync(file.uri, {
+        mimeType: "application/pdf",
+        dialogTitle: t.download,
+        UTI: "com.adobe.pdf",
+      });
+
+      Alert.alert(
+        t.downloadSuccessTitle,
+        t.downloadSuccess
+      );
+
     } catch (error: any) {
-      Alert.alert(t.error, error?.message || t.downloadError);
+      console.error(
+        "❌ Final download error:",
+        error
+      );
+
+      Alert.alert(
+        t.error,
+        error?.message || t.downloadError
+      );
     } finally {
       setLoading(false);
     }
@@ -1534,25 +1587,6 @@ export default function PdfEditorScreen() {
     });
   };
 
-  // הורדה בינארית נקיָה ישירות ל-Uint8Array
-  const fetchFontAsBase64 = (url: string): Promise<Uint8Array> => {
-    return new Promise((resolve, reject) => {
-      const xhr = new XMLHttpRequest();
-      xhr.open("GET", url, true);
-      xhr.responseType = "arraybuffer";
-      xhr.onload = () => {
-        // בדיקה קפדנית שקיבלנו תשובת 200 ולא דף שגיאה 404
-        if (xhr.status === 200 && xhr.response) {
-          resolve(new Uint8Array(xhr.response));
-        } else {
-          reject(new Error(`Font fetch failed with status: ${xhr.status}`));
-        }
-      };
-      xhr.onerror = () => reject(new Error("Network error fetching font"));
-      xhr.send();
-    });
-  };
-
   const buildModifiedPdfBytes = async (
     pdfBytes: ArrayBuffer | null,
     elements: EditorElement[]
@@ -1561,63 +1595,118 @@ export default function PdfEditorScreen() {
 
     try {
       const { PDFDocument, rgb } = await getPdfLib();
+
       const pdfDoc = await PDFDocument.load(pdfBytes.slice(0));
       const pages = pdfDoc.getPages();
 
       if (pages.length === 0) return null;
 
+      // -----------------------------------------
+      // Rubik
+      // -----------------------------------------
+      let rubikFont: any = null;
+
+      const hasText = elements.some(
+        (el) => el.type === "text" && !!el.text
+      );
+
+      if (hasText) {
+        try {
+          const fontBytes = await getRubikFontBytes();
+
+          pdfDoc.registerFontkit(fontkit);
+
+          rubikFont = await pdfDoc.embedFont(fontBytes);
+
+          console.log("✅ Rubik font embedded");
+        } catch (fontErr) {
+          console.error("❌ Rubik font loading failed:", fontErr);
+        }
+      }
+
+      // -----------------------------------------
+      // Elements
+      // -----------------------------------------
+
       for (const el of elements) {
-        const pageIdx = Math.min(el.pageIndex ?? 0, pages.length - 1);
+        const pageIdx = Math.min(
+          el.pageIndex ?? 0,
+          pages.length - 1
+        );
+
         const targetPage = pages[pageIdx];
-        const { width: pageWidth, height: pageHeight } = targetPage.getSize();
+
+        const {
+          width: pageWidth,
+          height: pageHeight,
+        } = targetPage.getSize();
 
         const absX = el.x * pageWidth;
         const absWidth = el.width * pageWidth;
         const absHeight = el.height * pageHeight;
-        const absY = pageHeight - el.y * pageHeight - absHeight;
 
-        // 1. טיפול בטקסט בטוח ב-100% ללא WinAnsi וללא InvocationTargetException
+        const absY =
+          pageHeight -
+          el.y * pageHeight -
+          absHeight;
+
+        // -----------------------------------------
+        // TEXT
+        // -----------------------------------------
+
         if (el.type === "text" && el.text) {
           try {
-            let pngBase64 = "";
-
-            if (Platform.OS === "web") {
-              const rendered = await renderCrispTextToCanvas(
-                el.text,
-                el.fontSize || 16
+            if (!rubikFont) {
+              console.warn(
+                "⚠️ Rubik unavailable, skipping text:",
+                el.text
               );
-              if (rendered?.base64Png) pngBase64 = rendered.base64Png;
+              continue;
             }
 
-            if (pngBase64 && pngBase64.startsWith("data:image/png")) {
-              const cleanB64 = pngBase64
-                .replace(/^data:image\/png;base64,/, "")
-                .trim();
-              const imageBytes = _base64ToArrayBuffer(cleanB64);
-              const pngImage = await pdfDoc.embedPng(imageBytes);
+            targetPage.drawText(el.text, {
+              x: absX,
+              y: absY,
+              size: el.fontSize || 16,
+              font: rubikFont,
+              color: rgb(0, 0, 0),
+            });
 
-              targetPage.drawImage(pngImage, {
-                x: absX,
-                y: absY,
-                width: absWidth,
-                height: absHeight,
-              });
-            }
+            console.log(
+              "✅ Text added:",
+              el.text
+            );
           } catch (textErr) {
-            console.warn("Text embedding error handled:", textErr);
+            console.warn(
+              "Rubik text draw error:",
+              textErr
+            );
           }
         }
-        // 2. טיפול בחתימה
-        else if (el.type === "signature" && el.imageUri) {
+
+        // -----------------------------------------
+        // SIGNATURE
+        // -----------------------------------------
+
+        else if (
+          el.type === "signature" &&
+          el.imageUri
+        ) {
           try {
             const cleanB64 = el.imageUri
-              .replace(/^data:image\/\w+;base64,/, "")
+              .replace(
+                /^data:image\/\w+;base64,/,
+                ""
+              )
               .replace(/\s/g, "");
-            const imageBytes = _base64ToArrayBuffer(cleanB64);
+
+            const imageBytes =
+              _base64ToArrayBuffer(cleanB64);
 
             const isJpg =
               el.imageUri.includes("image/jpeg") ||
               el.imageUri.includes("image/jpg");
+
             const pdfImage = isJpg
               ? await pdfDoc.embedJpg(imageBytes)
               : await pdfDoc.embedPng(imageBytes);
@@ -1629,78 +1718,69 @@ export default function PdfEditorScreen() {
               height: absHeight,
             });
           } catch (sigErr) {
-            console.warn("Signature draw warning:", sigErr);
+            console.warn(
+              "Signature draw warning:",
+              sigErr
+            );
           }
         }
-        // 3. מרקור / צנזור
-        else if (el.type === "highlight" || el.type === "redact") {
+
+        // -----------------------------------------
+        // HIGHLIGHT / REDACT
+        // -----------------------------------------
+
+        else if (
+          el.type === "highlight" ||
+          el.type === "redact"
+        ) {
           targetPage.drawRectangle({
             x: absX,
             y: absY,
             width: absWidth,
             height: absHeight,
-            color: el.type === "redact" ? rgb(0, 0, 0) : rgb(1, 0.9, 0.2),
-            opacity: el.type === "highlight" ? 0.45 : 1.0,
+            color:
+              el.type === "redact"
+                ? rgb(0, 0, 0)
+                : rgb(1, 0.9, 0.2),
+            opacity:
+              el.type === "highlight"
+                ? 0.45
+                : 1.0,
           });
         }
       }
 
       return await pdfDoc.save();
     } catch (err) {
-      console.error("PDF generation failed:", err);
+      console.error(
+        "PDF generation failed:",
+        err
+      );
+
       return null;
     }
   };
 
-  // יצירת PNG נקי ואמיתי מטקסט בעברית ללא SVG וללא קריסות Native
-  const createHebrewTextPngBase64 = async (
-    text: string,
-    fontSize: number
-  ): Promise<string | null> => {
-    if (Platform.OS === "web") return null;
+  const getRubikFontBytes = async (): Promise<ArrayBuffer> => {
+    const asset = Asset.fromModule(
+      require("../../../assets/fonts/Rubik-Regular.ttf")
+    );
 
-    // יצירת HTML קל משקל המרנדר Canvas ומחזיר PNG Base64 נקי
-    const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <body>
-        <canvas id="c"></canvas>
-        <script>
-          const canvas = document.getElementById('c');
-          const ctx = canvas.getContext('2d');
-          const text = ${JSON.stringify(text)};
-          const fontSize = ${fontSize * 3};
+    await asset.downloadAsync();
 
-          ctx.font = fontSize + "px Arial, sans-serif";
-          const metrics = ctx.measureText(text);
+    if (!asset.localUri) {
+      throw new Error("Rubik font could not be loaded");
+    }
 
-          const padding = 20;
-          canvas.width = Math.ceil(metrics.width) + padding * 2;
-          canvas.height = Math.ceil(fontSize * 1.4) + padding * 2;
+    const file = new File(asset.localUri);
 
-          ctx.font = fontSize + "px Arial, sans-serif";
-          ctx.textBaseline = "top";
-          ctx.fillStyle = "#000000";
-          ctx.direction = "rtl";
-          ctx.fillText(text, canvas.width - padding, padding);
+    if (!file.exists) {
+      throw new Error(`Rubik font file does not exist: ${asset.localUri}`);
+    }
 
-          // שליחת ה-Base64 חזרה
-          window.ReactNativeWebView.postMessage(canvas.toDataURL('image/png'));
-        </script>
-      </body>
-      </html>
-    `;
-
-    return new Promise((resolve) => {
-      // במידה ואין מענה תוך שנייה, מבוצע Fallback
-      const timeout = setTimeout(() => resolve(null), 1200);
-
-      // Render via WebView temp instance if needed or Canvas
-      resolve(null); // במידה ורוצים פתרון מיידי ללא עיכוב asynchronous
-    });
+    return await file.arrayBuffer();
   };
 
-  // פונקציה להפיכת טקסט עברי כדי שלא יופיע הפוך ב-PDF ב-Mobile
   const fixHebrewText = (text: string) => {
     const hasHebrew = /[\u0590-\u05FF]/.test(text);
     if (!hasHebrew) return text;
