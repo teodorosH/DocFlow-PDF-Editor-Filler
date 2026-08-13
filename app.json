@@ -21,8 +21,12 @@
       "package": "com.teodoros90.docFlow"
     },
     "web": {
+      "bundler": "metro",
       "output": "static",
       "favicon": "./assets/images/favicon.png"
+    },
+    "router": {
+      "root": "./app"
     },
     "plugins": [
       "expo-router",

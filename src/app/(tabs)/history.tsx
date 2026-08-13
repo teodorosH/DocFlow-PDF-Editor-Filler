@@ -4,7 +4,7 @@ import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { createAndExportPdf } from '../../services/pdfService';
 import { deleteInvoiceFromHistory, getInvoiceHistory } from '../../services/storageService';
 import { InvoiceData } from '../../types';
-import { useAppLanguage } from '../languageStore';
+import { useAppLanguage } from '../../languageStore';
 
 const T = {
   he:{title:'היסטוריית מסמכים 📜',empty:'עדיין לא הופקו מסמכים במערכת.',date:'תאריך',total:'סה״כ',download:'הורד',error:'שגיאה',deleteConfirm:'האם למחוק את המסמך?',cancel:'ביטול',delete:'מחק',dateLocale:'he-IL'},

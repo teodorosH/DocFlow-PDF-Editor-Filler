@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { createAndExportPdf } from '../../services/pdfService';
 import { InvoiceData } from '../../types';
-import { useAppLanguage } from '../languageStore';
+import { useAppLanguage } from '../../languageStore';
 
 const T = {
   he: { title: 'הפקת מסמך / חשבונית חדשה 📄', subtitle: '100% מקומי | ללא דליפת מידע | חדות וקטורית', client: 'שם הלקוח / חברה:', clientPh: 'הכנס שם...', tax: 'ח.פ / ע.מ:', taxPh: 'הכנס ח.פ...', desc: 'תיאור השירות:', descPh: 'תיאור...', price: 'מחיר (₪ לפני מע״מ):', generate: 'הפק ושמור PDF', error: 'שגיאה', required: 'אנא מלא את כל שדות החובה', success: 'הצלחה', saved: 'המסמך הופק ונשמר בהיסטוריה!', dateLocale: 'he-IL', defaultName: 'ישראל ישראלי', defaultDesc: 'פיתוח תוכנה והקמת תשתיות', notes: 'תשלום תוך 30 יום. תודה על העסקים!' },

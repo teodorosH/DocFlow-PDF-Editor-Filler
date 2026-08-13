@@ -22,7 +22,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView } from 'react-native-webview';
-import { setAppLanguage, useAppLanguage } from '../languageStore';
+import { setAppLanguage, useAppLanguage } from '../../languageStore';
 
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'https://docflow.teoplatform.com';
 
@@ -564,39 +564,46 @@ export default function PdfEditorScreen() {
   };
 
   const handleUploadSignatureImage = async () => {
-    if (!signatureClickPos) return;
-    try {
+  if (!signatureClickPos) return;
+  try {
+    let asset: { uri: string; name: string; mimeType: string } | null = null;
+
+    if (Platform.OS === 'web') {
+      asset = await pickFileWeb('image/png,image/jpeg,image/jpg');
+      if (!asset) return;
+    } else {
       const result = await DocumentPicker.getDocumentAsync({
         type: ['image/png', 'image/jpeg', 'image/jpg'],
         copyToCacheDirectory: true,
       });
       if (result.canceled || !result.assets?.[0]) return;
-
-      const asset = result.assets[0];
-      let dataUrl = '';
-
-      if (Platform.OS === 'web') {
-        const res = await fetch(asset.uri);
-        const blob = await res.blob();
-        dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(reader.result as string);
-          reader.readAsDataURL(blob);
-        });
-      } else {
-        const base64 = await FileSystem.readAsStringAsync(asset.uri, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        const mime = asset.mimeType || 'image/png';
-        dataUrl = `data:${mime};base64,${base64}`;
-      }
-
-      placeSignatureElement(dataUrl);
-    } catch (err: any) {
-      console.error('Signature upload error:', err);
-      Alert.alert(t.error, err?.message || t.uploadError);
+      asset = result.assets[0];
     }
-  };
+
+    let dataUrl = '';
+
+    if (Platform.OS === 'web') {
+      const res = await fetch(asset.uri);
+      const blob = await res.blob();
+      dataUrl = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+    } else {
+      const base64 = await FileSystem.readAsStringAsync(asset.uri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      const mime = asset.mimeType || 'image/png';
+      dataUrl = `data:${mime};base64,${base64}`;
+    }
+
+    placeSignatureElement(dataUrl);
+  } catch (err: any) {
+    console.error('Signature upload error:', err);
+    Alert.alert(t.error, err?.message || t.uploadError);
+  }
+};
 
   const handlePageChange = (newIndex: number) => {
     if (!currentUser && newIndex > 0) {
@@ -653,50 +660,92 @@ export default function PdfEditorScreen() {
     }
   };
 
+const pickFileWeb = (acceptType: string): Promise<{ uri: string; name: string; mimeType: string } | null> => {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = acceptType;
+    input.onchange = (e: any) => {
+      const file = e.target.files?.[0];
+      if (!file) {
+        resolve(null);
+        return;
+      }
+      const uri = URL.createObjectURL(file);
+      resolve({
+        uri,
+        name: file.name,
+        mimeType: file.type || acceptType,
+      });
+    };
+    // אם המשתמש סגר את החלון בלי לבחור
+    window.addEventListener('focus', () => {
+      setTimeout(() => resolve(null), 1000);
+    }, { once: true });
+    
+    input.click();
+  });
+};
+
   const processDocumentUpload = async () => {
-    try {
-      setLoading(true);
+  try {
+    setLoading(true);
+    let uri = '';
+
+    if (Platform.OS === 'web') {
+      const asset = await pickFileWeb('application/pdf');
+      if (!asset) {
+        setLoading(false);
+        return;
+      }
+      uri = asset.uri;
+    } else {
       const result = await DocumentPicker.getDocumentAsync({
         type: 'application/pdf',
         copyToCacheDirectory: true,
       });
 
-      if (result.canceled || !result.assets?.[0]) return;
-
-      const uri = result.assets[0].uri;
-      setPdfUri(uri);
-      setElements([]);
-      setActiveInput(null);
-      setSelectedElementId(null);
-      setZoomScale(1.0);
-
-      // Fetch handles file:// URIs natively and avoids "isn't readable" Android errors
-      const res = await fetch(uri);
-      const bytes = await res.arrayBuffer();
-
-      setPdfBytes(bytes);
-
-      const { PDFDocument } = await getPdfLib();
-      const pdfDoc = await PDFDocument.load(bytes.slice(0));
-      const pages = pdfDoc.getPages();
-      setNumPages(pages.length);
-      setCurrentPageIndex(0);
-
-      const firstPage = pages[0];
-      const { width, height } = firstPage.getSize();
-
-      setPdfDimensions({
-        width,
-        height,
-        aspectRatio: width / height,
-      });
-    } catch (err: any) {
-      console.error('Upload Error:', err);
-      Alert.alert(t.uploadErrorTitle, err?.message || t.uploadError);
-    } finally {
-      setLoading(false);
+      if (result.canceled || !result.assets?.[0]) {
+        setLoading(false);
+        return;
+      }
+      uri = result.assets[0].uri;
     }
-  };
+
+    setPdfUri(uri);
+    setElements([]);
+    setActiveInput(null);
+    setSelectedElementId(null);
+    setZoomScale(1.0);
+
+    const res = await fetch(uri);
+    const bytes = await res.arrayBuffer();
+
+    setPdfBytes(bytes);
+
+    const { PDFDocument } = await getPdfLib();
+    const pdfDoc = await PDFDocument.load(bytes.slice(0));
+    const pages = pdfDoc.getPages();
+    setNumPages(pages.length);
+    setCurrentPageIndex(0);
+
+    const firstPage = pages[0];
+    const { width, height } = firstPage.getSize();
+
+    setPdfDimensions({
+      width,
+      height,
+      aspectRatio: width / height,
+    });
+  } catch (err: any) {
+    console.error('Upload Error:', err);
+    Alert.alert(t.uploadErrorTitle, err?.message || t.uploadError);
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const handlePreviewPdf = () => {
     if (!pdfBytes) return;

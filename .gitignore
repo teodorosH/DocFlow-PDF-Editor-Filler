@@ -73,3 +73,6 @@ Thumbs.db
 logs
 *.log
 pm2.log
+/dist-electron
+electron-main.js
+metro.config.js
