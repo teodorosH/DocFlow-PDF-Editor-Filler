@@ -1,11 +1,10 @@
 import { loadPDFDocument } from "@/utils/pdfLoader";
-// import * as FileSystem from "expo-file-system/legacy";
+import * as FileSystem from "expo-file-system/legacy";
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
 import fontkit from "@pdf-lib/fontkit";
 import { Asset } from "expo-asset";
-import * as FileSystem from "expo-file-system";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -1511,12 +1510,16 @@ export default function PdfEditorScreen() {
 
     const widthNorm = 150 / CONTAINER_WIDTH;
     const heightNorm = 34 / containerHeight;
+
+    // תיקון: מיקום ה-Y כך שהלחיצה תהיה במרכז התיבה ולא בקצה העליון שלה
+    const normalizedY = activeInput.y - heightNorm / 2;
+
     const newElement: EditorElement = {
       id: Date.now().toString(),
       type: "text",
       text: currentText.trim(),
-      x: Math.max(0, Math.min(1 - widthNorm, activeInput.x)),
-      y: Math.max(0, Math.min(1 - heightNorm, activeInput.y)),
+      x: Math.max(0, Math.min(1 - widthNorm, activeInput.x - widthNorm / 2)), // מומלץ למרכז גם את ה-X
+      y: Math.max(0, Math.min(1 - heightNorm, normalizedY)),
       width: widthNorm,
       height: heightNorm,
       fontSize: defaultFontSize,
@@ -1657,30 +1660,39 @@ export default function PdfEditorScreen() {
         if (el.type === "text" && el.text) {
           try {
             if (!rubikFont) {
-              console.warn(
-                "⚠️ Rubik unavailable, skipping text:",
-                el.text
-              );
+              console.warn("⚠️ Rubik unavailable, skipping text:", el.text);
               continue;
             }
 
+            const fontSize = el.fontSize || 16;
+            const pageHeight = targetPage.getHeight();
+            const pageWidth = targetPage.getWidth();
+
+            const elementTopY = pageHeight - (el.y * pageHeight);
+            const elementHeight = (el.height || 0.05) * pageHeight;
+
+            const boxCenterY = elementTopY - (elementHeight / 2);
+
+            // התיקון המדויק והמופרד:
+            // ב-Web נשארים עם הנוסחה שעובדת מושלם.
+            // במובייל אנחנו מתבססים נטו על מרכז התיבה (boxCenterY) בלי להוסיף את גודל הפונט שגרם להם לעוף למעלה!
+            const correctedY = Platform.OS === "web"
+              ? boxCenterY + (fontSize * 0.35)
+              : boxCenterY; // במובייל - בדיוק במרכז התיבה בלי תוספות שמקפיצות את הטקסט
+
+            const absX = (el.x * pageWidth);
+
             targetPage.drawText(el.text, {
               x: absX,
-              y: absY,
-              size: el.fontSize || 16,
+              y: correctedY,
+              size: fontSize,
               font: rubikFont,
               color: rgb(0, 0, 0),
             });
 
-            console.log(
-              "✅ Text added:",
-              el.text
-            );
+            console.log("✅ Text perfectly aligned:", el.text);
           } catch (textErr) {
-            console.warn(
-              "Rubik text draw error:",
-              textErr
-            );
+            console.warn("Rubik text draw error:", textErr);
           }
         }
 
@@ -1761,24 +1773,32 @@ export default function PdfEditorScreen() {
     }
   };
 
+
   const getRubikFontBytes = async (): Promise<ArrayBuffer> => {
     const asset = Asset.fromModule(
       require("../../../assets/fonts/Rubik-Regular.ttf")
     );
 
     await asset.downloadAsync();
+    const fontUri = asset.localUri || asset.uri;
 
-    if (!asset.localUri) {
+    if (!fontUri) {
       throw new Error("Rubik font could not be loaded");
     }
 
-    const file = new File(asset.localUri);
-
-    if (!file.exists) {
-      throw new Error(`Rubik font file does not exist: ${asset.localUri}`);
+    if (Platform.OS === "web") {
+      const response = await fetch(fontUri);
+      if (!response.ok) {
+        throw new Error(`Rubik font file could not be fetched from: ${fontUri}`);
+      }
+      return await response.arrayBuffer();
+    } else {
+      // שימוש ב-legacy API שנמנע מהאזהרה והשגיאה בגרסה 54
+      const base64Data = await FileSystem.readAsStringAsync(fontUri, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      return _base64ToArrayBuffer(base64Data);
     }
-
-    return await file.arrayBuffer();
   };
 
   const fixHebrewText = (text: string) => {
